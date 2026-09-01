@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: ecommerce_backend
+    volumes:
+      # Mapea la carpeta local './uploads' del host con '/app/uploads' dentro del contenedor
+      - ./uploads:/app/uploads
+    environment:
+      - PORT=3000
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
