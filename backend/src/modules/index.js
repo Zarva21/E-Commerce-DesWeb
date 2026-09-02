@@ -54,7 +54,7 @@ db.category = require("./catalog/categories/category.model.js")(sequelize, Seque
 db.brand = require("./catalog/brands/brand.model.js")(sequelize, Sequelize);
 db.supplier = require("./catalog/suppliers/supplier.model.js")(sequelize, Sequelize);
 db.product = require("./catalog/products/product.model.js")(sequelize, Sequelize);
-db.productvariant = require("./catalog/products/productVariant.model.js")(sequelize, Sequelize);
+db.productVariant = require("./catalog/products/productVariant.model.js")(sequelize, Sequelize);
 db.productImage = require("./catalog/products/productImage.model.js")(sequelize, Sequelize);
 db.productReview = require("./catalog/reviews/productReview.model.js")(sequelize, Sequelize);
 
@@ -72,118 +72,118 @@ db.payment = require("./sales/finance/payment.model.js")(sequelize, Sequelize);
 
 //marketing/
 db.coupon = require("./marketing/coupons/coupon.model.js")(sequelize, Sequelize);
-db.orderCupon = require("./marketing/coupons/orderCoupon.model.js")(sequelize, Sequelize);
+db.orderCoupon = require("./marketing/coupons/orderCoupon.model.js")(sequelize, Sequelize);
 
 //system/
-db.auditlog = require("./system/audit/auditLog.model.js")(sequelize, Sequelize);
+db.auditLog = require("./system/audit/auditLog.model.js")(sequelize, Sequelize);
 
 
 // ASOCIACIONES (equivalentes a los REFERENCES del SQL)
 
 
 // roles -> users
-db.roles.hasMany(db.users, { foreignKey: "role_id" });
-db.users.belongsTo(db.roles, { foreignKey: "role_id" });
+db.role.hasMany(db.user, { foreignKey: "role_id" });
+db.user.belongsTo(db.role, { foreignKey: "role_id" });
 
 // users -> customers (1:1)
-db.users.hasOne(db.customers, { foreignKey: "user_id" });
-db.customers.belongsTo(db.users, { foreignKey: "user_id" });
+db.user.hasOne(db.customer, { foreignKey: "user_id" });
+db.customer.belongsTo(db.user, { foreignKey: "user_id" });
 
 // users -> employees (1:1)
-db.users.hasOne(db.employees, { foreignKey: "user_id" });
-db.employees.belongsTo(db.users, { foreignKey: "user_id" });
+db.user.hasOne(db.employee, { foreignKey: "user_id" });
+db.employee.belongsTo(db.user, { foreignKey: "user_id" });
 
 // users -> audit_logs
-db.users.hasMany(db.auditLogs, { foreignKey: "user_id" });
-db.auditLogs.belongsTo(db.users, { foreignKey: "user_id" });
+db.user.hasMany(db.auditLog, { foreignKey: "user_id" });
+db.auditLog.belongsTo(db.user, { foreignKey: "user_id" });
 
 // customers -> addresses
-db.customers.hasMany(db.addresses, { foreignKey: "customer_id" });
-db.addresses.belongsTo(db.customers, { foreignKey: "customer_id" });
+db.customer.hasMany(db.address, { foreignKey: "customer_id" });
+db.address.belongsTo(db.customer, { foreignKey: "customer_id" });
 
 // customers -> carts
-db.customers.hasMany(db.carts, { foreignKey: "customer_id" });
-db.carts.belongsTo(db.customers, { foreignKey: "customer_id" });
+db.customer.hasMany(db.cart, { foreignKey: "customer_id" });
+db.cart.belongsTo(db.customer, { foreignKey: "customer_id" });
 
 // customers -> orders
-db.customers.hasMany(db.orders, { foreignKey: "customer_id" });
-db.orders.belongsTo(db.customers, { foreignKey: "customer_id" });
+db.customer.hasMany(db.order, { foreignKey: "customer_id" });
+db.order.belongsTo(db.customer, { foreignKey: "customer_id" });
 
 // customers -> product_reviews
-db.customers.hasMany(db.productReviews, { foreignKey: "customer_id" });
-db.productReviews.belongsTo(db.customers, { foreignKey: "customer_id" });
+db.customer.hasMany(db.productReview, { foreignKey: "customer_id" });
+db.productReview.belongsTo(db.customer, { foreignKey: "customer_id" });
 
 // categories (auto-referencia: categoria padre)
-db.categories.hasMany(db.categories, { foreignKey: "parent_category_id", as: "subcategories" });
-db.categories.belongsTo(db.categories, { foreignKey: "parent_category_id", as: "parentCategory" });
+db.category.hasMany(db.category, { foreignKey: "parent_category_id", as: "subcategories" });
+db.category.belongsTo(db.category, { foreignKey: "parent_category_id", as: "parentCategory" });
 
 // categories/brands/suppliers -> products
-db.categories.hasMany(db.products, { foreignKey: "category_id" });
-db.products.belongsTo(db.categories, { foreignKey: "category_id" });
+db.category.hasMany(db.product, { foreignKey: "category_id" });
+db.product.belongsTo(db.category, { foreignKey: "category_id" });
 
-db.brands.hasMany(db.products, { foreignKey: "brand_id" });
-db.products.belongsTo(db.brands, { foreignKey: "brand_id" });
+db.brand.hasMany(db.product, { foreignKey: "brand_id" });
+db.product.belongsTo(db.brand, { foreignKey: "brand_id" });
 
-db.suppliers.hasMany(db.products, { foreignKey: "supplier_id" });
-db.products.belongsTo(db.suppliers, { foreignKey: "supplier_id" });
+db.supplier.hasMany(db.product, { foreignKey: "supplier_id" });
+db.product.belongsTo(db.supplier, { foreignKey: "supplier_id" });
 
 // products -> product_variants / product_images / product_reviews
-db.products.hasMany(db.productVariants, { foreignKey: "product_id" });
-db.productVariants.belongsTo(db.products, { foreignKey: "product_id" });
+db.product.hasMany(db.productVariant, { foreignKey: "product_id" });
+db.productVariant.belongsTo(db.product, { foreignKey: "product_id" });
 
-db.products.hasMany(db.productImages, { foreignKey: "product_id" });
-db.productImages.belongsTo(db.products, { foreignKey: "product_id" });
+db.product.hasMany(db.productImage, { foreignKey: "product_id" });
+db.productImage.belongsTo(db.product, { foreignKey: "product_id" });
 
-db.products.hasMany(db.productReviews, { foreignKey: "product_id" });
-db.productReviews.belongsTo(db.products, { foreignKey: "product_id" });
+db.product.hasMany(db.productReview, { foreignKey: "product_id" });
+db.productReview.belongsTo(db.product, { foreignKey: "product_id" });
 
 // product_variants -> stock (1:1)
-db.productVariants.hasOne(db.stock, { foreignKey: "product_variant_id" });
-db.stock.belongsTo(db.productVariants, { foreignKey: "product_variant_id" });
+db.productVariant.hasOne(db.stock, { foreignKey: "product_variant_id" });
+db.stock.belongsTo(db.productVariant, { foreignKey: "product_variant_id" });
 
 // product_variants -> inventory_movements
-db.productVariants.hasMany(db.inventoryMovements, { foreignKey: "product_variant_id" });
-db.inventoryMovements.belongsTo(db.productVariants, { foreignKey: "product_variant_id" });
+db.productVariant.hasMany(db.inventoryMovement, { foreignKey: "product_variant_id" });
+db.inventoryMovement.belongsTo(db.productVariant, { foreignKey: "product_variant_id" });
 
 // employees -> inventory_movements / invoices
-db.employees.hasMany(db.inventoryMovements, { foreignKey: "employee_id" });
-db.inventoryMovements.belongsTo(db.employees, { foreignKey: "employee_id" });
+db.employee.hasMany(db.inventoryMovement, { foreignKey: "employee_id" });
+db.inventoryMovement.belongsTo(db.employee, { foreignKey: "employee_id" });
 
-db.employees.hasMany(db.invoices, { foreignKey: "employee_id" });
-db.invoices.belongsTo(db.employees, { foreignKey: "employee_id" });
+db.employee.hasMany(db.invoice, { foreignKey: "employee_id" });
+db.invoice.belongsTo(db.employee, { foreignKey: "employee_id" });
 
 // carts -> cart_items
-db.carts.hasMany(db.cartItems, { foreignKey: "cart_id" });
-db.cartItems.belongsTo(db.carts, { foreignKey: "cart_id" });
+db.cart.hasMany(db.cartItem, { foreignKey: "cart_id" });
+db.cartItem.belongsTo(db.cart, { foreignKey: "cart_id" });
 
 // product_variants -> cart_items / order_items
-db.productVariants.hasMany(db.cartItems, { foreignKey: "product_variant_id" });
-db.cartItems.belongsTo(db.productVariants, { foreignKey: "product_variant_id" });
+db.productVariant.hasMany(db.cartItem, { foreignKey: "product_variant_id" });
+db.cartItem.belongsTo(db.productVariant, { foreignKey: "product_variant_id" });
 
-db.productVariants.hasMany(db.orderItems, { foreignKey: "product_variant_id" });
-db.orderItems.belongsTo(db.productVariants, { foreignKey: "product_variant_id" });
+db.productVariant.hasMany(db.orderItem, { foreignKey: "product_variant_id" });
+db.orderItem.belongsTo(db.productVariant, { foreignKey: "product_variant_id" });
 
 // addresses -> orders
-db.addresses.hasMany(db.orders, { foreignKey: "address_id" });
-db.orders.belongsTo(db.addresses, { foreignKey: "address_id" });
+db.address.hasMany(db.order, { foreignKey: "address_id" });
+db.order.belongsTo(db.address, { foreignKey: "address_id" });
 
 // orders -> order_items / order_coupons / invoices
-db.orders.hasMany(db.orderItems, { foreignKey: "order_id" });
-db.orderItems.belongsTo(db.orders, { foreignKey: "order_id" });
+db.order.hasMany(db.orderItem, { foreignKey: "order_id" });
+db.orderItem.belongsTo(db.order, { foreignKey: "order_id" });
 
-db.orders.hasMany(db.orderCoupons, { foreignKey: "order_id" });
-db.orderCoupons.belongsTo(db.orders, { foreignKey: "order_id" });
+db.order.hasMany(db.orderCoupon, { foreignKey: "order_id" });
+db.orderCoupon.belongsTo(db.order, { foreignKey: "order_id" });
 
-db.orders.hasOne(db.invoices, { foreignKey: "order_id" });
-db.invoices.belongsTo(db.orders, { foreignKey: "order_id" });
+db.order.hasOne(db.invoice, { foreignKey: "order_id" });
+db.invoice.belongsTo(db.order, { foreignKey: "order_id" });
 
 // coupons -> order_coupons
-db.coupons.hasMany(db.orderCoupons, { foreignKey: "coupon_id" });
-db.orderCoupons.belongsTo(db.coupons, { foreignKey: "coupon_id" });
+db.coupon.hasMany(db.orderCoupon, { foreignKey: "coupon_id" });
+db.orderCoupon.belongsTo(db.coupon, { foreignKey: "coupon_id" });
 
 // invoices -> payments
-db.invoices.hasMany(db.payments, { foreignKey: "invoice_id" });
-db.payments.belongsTo(db.invoices, { foreignKey: "invoice_id" });
+db.invoice.hasMany(db.payment, { foreignKey: "invoice_id" });
+db.payment.belongsTo(db.invoice, { foreignKey: "invoice_id" });
 
 
 
