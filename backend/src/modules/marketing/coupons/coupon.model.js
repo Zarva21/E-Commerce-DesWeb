@@ -10,7 +10,13 @@ module.exports = (sequelize, Sequelize) => {
     },
     discount_type: {
       type: Sequelize.STRING(20),
-      allowNull: false
+      allowNull: false,
+      validate: {
+        isIn: {
+          args: [["percentage", "fixed"]],
+          msg: "discount_type debe ser 'percentage' o 'fixed'."
+        }
+      }
     },
     discount_value: {
       type: Sequelize.DECIMAL(12, 2),
@@ -35,6 +41,14 @@ module.exports = (sequelize, Sequelize) => {
     is_active: {
       type: Sequelize.BOOLEAN,
       defaultValue: true
+    },
+    // AGREGADO (módulo Marketing):
+    // Los cupones normales de campaña van con customer_id = NULL (los usa cualquiera).
+    // Los cupones de "Store Credit" emitidos por una devolución quedan amarrados
+    // al cliente que devolvió la mercadería, para que nadie más los canjee.
+    customer_id: {
+      type: Sequelize.BIGINT,
+      allowNull: true
     }
   }, {
     timestamps: true,
