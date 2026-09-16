@@ -109,6 +109,9 @@ db.cart.belongsTo(db.customer, { foreignKey: "customer_id" });
 db.customer.hasMany(db.order, { foreignKey: "customer_id" });
 db.order.belongsTo(db.customer, { foreignKey: "customer_id" });
 
+db.customer.hasMany(db.coupon, { foreignKey: "customer_id" });
+db.coupon.belongsTo(db.customer, { foreignKey: "customer_id" });
+
 // customers -> product_reviews
 db.customer.hasMany(db.productReview, { foreignKey: "customer_id" });
 db.productReview.belongsTo(db.customer, { foreignKey: "customer_id" });

@@ -39,16 +39,25 @@ const recordMovement = async (
   // Row-Level Lock: mientras esta transacción no termine (commit/rollback),
   // ninguna otra transacción puede leer/escribir esta misma fila de stock.
   // Esto es lo que evita que dos compras simultáneas vendan la última unidad dos veces.
-  const stock = await Stock.findOne({
+  
+  // Buscamos el stock y lo bloqueamos
+  let stock = await Stock.findOne({
     where: { product_variant_id },
     transaction,
     lock: transaction.LOCK.UPDATE
   });
 
+  // --- EL FIX EMPIEZA AQUÍ ---
+  // Si la fila no existe (producto nuevo), la creamos con 0 unidades en esta misma transacción
   if (!stock) {
-    const error = new Error(`No existe registro de stock para la variante ${product_variant_id}.`);
-    error.status = 404;
-    throw error;
+    stock = await Stock.create(
+      { 
+        product_variant_id, 
+        quantity_on_hand: 0, 
+        reorder_level: 5 // Nivel de alerta por defecto
+      },
+      { transaction }
+    );
   }
 
   const newQuantity = stock.quantity_on_hand + quantityDelta;

@@ -3,7 +3,7 @@
 // controller (incluyendo los que usan catchAsync) termina aquí.
 
 module.exports = (err, req, res, next) => {
-  console.error("🔥 Error Global:", err.stack);
+  console.error("Error Global:", err.stack);
 
   const statusCode = err.status || err.statusCode || 500;
 
