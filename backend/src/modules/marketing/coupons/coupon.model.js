@@ -49,6 +49,23 @@ module.exports = (sequelize, Sequelize) => {
     customer_id: {
       type: Sequelize.BIGINT,
       allowNull: true
+    },
+    applicable_product_ids: {
+      type: Sequelize.JSONB, // JSONB es rapidísimo en Postgres
+      defaultValue: []
+    },
+    applicable_category_ids: {
+      type: Sequelize.JSONB,
+      defaultValue: []
+    },
+     // AGREGADO: combo/paquete. Si es true, applicable_product_ids deja de ser
+    // "cualquiera de estos da descuento" y pasa a ser "TODOS estos deben estar
+    // en el carrito, o el cupón simplemente no aplica". No agrega un tipo de
+    // descuento nuevo — reusa discount_type/discount_value tal cual, solo
+    // cambia la regla de elegibilidad.
+    is_bundle: {
+      type: Sequelize.BOOLEAN,
+      defaultValue: false
     }
   }, {
     timestamps: true,

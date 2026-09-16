@@ -172,11 +172,17 @@ exports.getAll = async (filters = {}, { isAdmin = false } = {}) => {
   // Paso 1: averiguar QUÉ productos entran en esta página (solo los ids).
   // Paso 2: traer esos productos completos con todo su árbol.
 
+  const step1Include = {
+    ...variantInclude,
+    attributes: [], // Limpia columnas de ProductVariant
+    include: variantInclude.include.map(inc => ({ ...inc, attributes: [] })) // Limpia columnas de Stock
+  };
+
   const rows = await Product.findAll({
     attributes: ["id"],
     where,
-    include: [{ ...variantInclude, attributes: [] }],
-    group: ["products.id"], // agrupar por PK permite ordenar por cualquier columna
+    include: [step1Include], // Usamos el include limpio
+    group: ["products.id"], // OJO: Algunos dialectos prefieren 'product.id' en singular, si falla, usa el de tu modelo exacto
     order,
     limit: pageSize,
     offset: (pageNumber - 1) * pageSize,
@@ -188,14 +194,10 @@ exports.getAll = async (filters = {}, { isAdmin = false } = {}) => {
 
   const total = await Product.count({
     where,
-    include: [{ ...variantInclude, attributes: [] }],
+    include: [step1Include], // También se lo pasamos al count por seguridad
     distinct: true,
-    col: "id" // OJO: aquí NO se pone "products.id", Sequelize ya le pone el prefijo
+    col: "id" 
   });
-
-  if (ids.length === 0) {
-    return { total, page: pageNumber, limit: pageSize, pages: Math.ceil(total / pageSize), data: [] };
-  }
 
   const products = await Product.findAll({
     where: { id: { [Op.in]: ids } },

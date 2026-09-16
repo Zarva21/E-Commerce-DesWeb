@@ -2,7 +2,7 @@ const db = require("../../index.js");
 const cartService = require("../carts/cart.service.js");
 const inventoryService = require("../../inventory/inventory.service.js");
 const marketingService = require("../../marketing/marketing.service.js");
-const stripe = require("../stripe.client.js");
+const stripe = require("../../../config/stripe.config.js");
 const businessConfig = require("../../../config/business.js");
 
 const User = db.user;
@@ -24,6 +24,10 @@ const httpError = (message, status) => {
 /**
  * Recalcula subtotal/descuento/total desde CERO, siempre contra datos
  * actuales de BD. JAMÁS se confía en un total que mande el frontend.
+ *
+ * CAMBIO: ahora le pasamos cart.items a validateCoupon, porque Marketing
+ * necesita saber QUÉ productos/categorías hay en el carrito para poder
+ * filtrar cupones por producto, categoría, o combo.
  */
 const computeTotals = async (cartId, couponCode, customerId) => {
   const cart = await cartService.getCartWithTotals(cartId);
@@ -34,8 +38,12 @@ const computeTotals = async (cartId, couponCode, customerId) => {
   let appliedCoupon = null;
 
   if (couponCode) {
-    const result = await marketingService.validateCoupon(couponCode, { subtotal, customerId });
-    if (!result) throw httpError("El cupón no es válido o ha expirado.", 400);
+    const result = await marketingService.validateCoupon(couponCode, {
+      subtotal,
+      customerId,
+      cartItems: cart.items // <-- antes no se mandaba
+    });
+    if (!result) throw httpError("El cupón no es válido, expiró, o no aplica a los productos de tu carrito.", 400);
     appliedCoupon = result;
     discount = result.discount_amount;
   }
@@ -46,14 +54,6 @@ const computeTotals = async (cartId, couponCode, customerId) => {
   return { cart, subtotal, discount, tax, total, appliedCoupon };
 };
 
-/**
- * True Shadow User — resuelve (o crea) la identidad de un invitado.
- *
- * Regla de seguridad NO NEGOCIABLE: si el correo ya pertenece a una cuenta
- * REAL (is_guest = false), se rechaza. Nunca se reutiliza silenciosamente
- * la identidad de alguien que sí tiene contraseña — eso sería secuestro
- * de cuenta / fuga de privacidad (revela si un correo está registrado).
- */
 const resolveGuestIdentity = async ({ email, firstName, lastName, address }, transaction) => {
   let user = await User.findOne({ where: { email }, transaction });
 
@@ -79,8 +79,6 @@ const resolveGuestIdentity = async ({ email, firstName, lastName, address }, tra
     );
   }
 
-  // Dirección de envío del invitado — se crea siempre nueva en cada compra
-  // (no tiene direcciones previas guardadas).
   const newAddress = await Address.create(
     { customer_id: customer.id, ...address, is_default: true },
     { transaction }
@@ -89,7 +87,6 @@ const resolveGuestIdentity = async ({ email, firstName, lastName, address }, tra
   return { customer, address: newAddress };
 };
 
-/** Cliente ya autenticado: busca su perfil y valida que la dirección sea suya. */
 const resolveAuthenticatedIdentity = async ({ userId, addressId }, transaction) => {
   const customer = await Customer.findOne({ where: { user_id: userId }, transaction });
   if (!customer) throw httpError("No se encontró un perfil de cliente para este usuario.", 404);
@@ -103,9 +100,6 @@ const resolveAuthenticatedIdentity = async ({ userId, addressId }, transaction) 
   return { customer, address };
 };
 
-// ============================================================
-// ENDPOINT 1: POST /sales/checkout/intent
-// ============================================================
 exports.createIntent = async ({ cartId, couponCode, userId }) => {
   let resolvedCustomerId = null;
   if (userId) {
@@ -116,7 +110,7 @@ exports.createIntent = async ({ cartId, couponCode, userId }) => {
   const { subtotal, discount, tax, total } = await computeTotals(cartId, couponCode, resolvedCustomerId);
 
   const paymentIntent = await stripe.paymentIntents.create({
-    amount: Math.round(total * 100), // Stripe trabaja en centavos
+    amount: Math.round(total * 100),
     currency: "usd",
     metadata: {
       cart_id: String(cartId),
@@ -135,28 +129,22 @@ exports.createIntent = async ({ cartId, couponCode, userId }) => {
   };
 };
 
-// ============================================================
-// ENDPOINT 2: POST /sales/checkout/confirm
-// ============================================================
 exports.confirmCheckout = async ({
   cartId,
   paymentMethod,
   stripePaymentIntentId,
   couponCode,
-  addressId,     // cliente autenticado
-  guestData,     // invitado: { email, first_name, last_name, address }
+  addressId,
+  guestData,
   userId,
   employeeId = null
 }) => {
-  // --- Recalcular total SIEMPRE, nunca confiar en lo que mande el cliente ---
   const { cart, subtotal, discount, tax, total, appliedCoupon } = await computeTotals(cartId, couponCode, null);
 
-  // --- Fail Fast: límite de efectivo, ANTES de escribir nada en BD ---
   if (paymentMethod === "CASH" && total > businessConfig.payment.maxCashLimit) {
     throw httpError(`No se permite efectivo para montos mayores a ${businessConfig.payment.maxCashLimit}.`, 400);
   }
 
-  // --- Verificación del pago con Stripe (solo si es CARD) ---
   let stripeIntent = null;
   if (paymentMethod === "CARD") {
     stripeIntent = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
@@ -172,11 +160,9 @@ exports.confirmCheckout = async ({
     }
   }
 
-  // --- Transacción ACID ---
   const t = await db.sequelize.transaction();
 
   try {
-    // Resolver identidad: invitado (True Shadow User) o cliente autenticado.
     const { customer, address } = userId
       ? await resolveAuthenticatedIdentity({ userId, addressId }, t)
       : await resolveGuestIdentity(
@@ -218,6 +204,9 @@ exports.confirmCheckout = async ({
         { order_id: order.id, coupon_id: appliedCoupon.coupon_id, discount_amount: discount },
         { transaction: t }
       );
+      // El cupón solo se "gasta" (used_count++) cuando la venta REALMENTE se
+      // concreta — dentro de la misma transacción, nunca en validateCoupon.
+      await marketingService.registerCouponUsage(appliedCoupon.coupon_id, t);
     }
 
     await inventoryService.deductStockForCheckout(

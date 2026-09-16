@@ -23,22 +23,24 @@ exports.getCartWithTotals = async (cartId) => {
     error.status = 404;
     throw error;
   }
-
+ 
   const cartItems = await CartItem.findAll({ where: { cart_id: cartId } });
-
+ 
   const items = [];
   let subtotal = 0;
-
+ 
   for (const item of cartItems) {
     const variant = await catalogService.getVariantForSale(item.product_variant_id);
-    if (!variant) continue; // producto descontinuado/inactivo: se ignora en el total, no rompe el carrito
-
+    if (!variant) continue; // producto descontinuado/inactivo: se ignora en el total
+ 
     const lineTotal = Number((variant.price * item.quantity).toFixed(2));
     subtotal += lineTotal;
-
+ 
     items.push({
       cart_item_id: item.id,
       product_variant_id: item.product_variant_id,
+      product_id: variant.product.id,
+      category_id: variant.product.category_id, // usado por Marketing para filtrar cupones
       sku: variant.sku,
       product_name: variant.product.name,
       unit_price: variant.price,
@@ -46,7 +48,7 @@ exports.getCartWithTotals = async (cartId) => {
       line_total: lineTotal
     });
   }
-
+ 
   return { cart_id: cart.id, status: cart.status, items, subtotal: Number(subtotal.toFixed(2)) };
 };
 
