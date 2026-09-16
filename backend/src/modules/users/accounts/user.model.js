@@ -11,7 +11,11 @@ module.exports = (sequelize, Sequelize) => {
     },
     password_hash: {
       type: Sequelize.STRING(255),
-      allowNull: false
+      allowNull: true
+    },
+    is_guest: {
+      type: Sequelize.BOOLEAN,
+      defaultValue: false
     },
     is_active: {
       type: Sequelize.BOOLEAN,

@@ -6,8 +6,8 @@ const userRoutes = require("./modules/users/users.routes");
 const catalogRoutes = require("./modules/catalog/catalog.routes");
 const salesRoutes = require("./modules/sales/sales.routes");
 const inventoryRoutes = require("./modules/inventory/inventory.routes");
-const marketingRoutes = require('./modules/marketing/marketing.routes');
-const systemRoutes = require('./modules/system/system.routes');
+const marketingRoutes = require("./modules/marketing/marketing.routes");
+const systemRoutes = require("./modules/system/system.routes");
 
 const errorHandler = require("./middlewares/error.middleware.js");
 
