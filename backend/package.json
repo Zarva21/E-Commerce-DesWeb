@@ -3,7 +3,12 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test --test-concurrency=1",
+    "test:watch": "node --test --watch --test-concurrency=1",
+    "test:services": "node scripts/verify-services.js",
+    "test:integration": "node scripts/run-integration-tests.js",
+    "test:cleanup": "node scripts/cleanup-qa-data.js",
+    "test:routes": "node scripts/run-route-audit.js"
   },
   "keywords": [],
   "author": "",

@@ -250,7 +250,7 @@ exports.confirmCheckout = async ({
       try {
         await stripe.refunds.create({ payment_intent: stripeIntent.id });
       } catch (refundErr) {
-        console.error("🚨 FALLO CRÍTICO: no se pudo reembolsar tras rollback del checkout:", refundErr.message);
+        console.error("FALLO CRÍTICO: no se pudo reembolsar tras rollback del checkout:", refundErr.message);
       }
     }
 

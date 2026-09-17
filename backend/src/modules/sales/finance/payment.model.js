@@ -18,7 +18,7 @@ module.exports = (sequelize, Sequelize) => {
     currency: {
       type: Sequelize.STRING(10),
       allowNull: false,
-      defaultValue: "USD"
+      defaultValue: "Q"
     },
     status: {
       type: Sequelize.STRING(20),

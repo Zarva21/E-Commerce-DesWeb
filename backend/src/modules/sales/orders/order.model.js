@@ -12,9 +12,8 @@ module.exports = (sequelize, Sequelize) => {
       unique: true
     },
     status: {
-      type: Sequelize.STRING(30),
-      allowNull: false,
-      defaultValue: "created"
+      type: Sequelize.ENUM("pending_payment", "paid", "shipped", "delivered", "cancelled"),
+      defaultValue: "pending_payment"
     },
     subtotal: {
       type: Sequelize.DECIMAL(12, 2),
