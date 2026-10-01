@@ -76,6 +76,7 @@ jobs:
         DB_NAME: qa_ecommerce
         DB_HOST: localhost
         RUN_ROUTE_AUDIT: "1"
+        STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
 
     - name: Pruebas de Integración (Checkout)
       run: node scripts/run-integration-tests.js
