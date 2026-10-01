@@ -28,6 +28,7 @@ const reads = [
 ];
 
 before(async () => {
+  if (process.env.RUN_ROUTE_AUDIT !== "1") return;
   dotenv.config({ path: ".env.development" });
   db = require("../src/modules");
   await db.sequelize.authenticate();

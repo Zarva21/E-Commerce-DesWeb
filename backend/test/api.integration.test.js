@@ -29,6 +29,7 @@ async function api(path, { method = "GET", token, body } = {}) {
 }
 
 before(async () => {
+  if (process.env.RUN_INTEGRATION !== "1") return;
   dotenv.config({ path: ".env.development" });
   db = require("../src/modules");
   await db.sequelize.authenticate();
@@ -55,6 +56,7 @@ after(async () => {
     if (ids.product) await db.productImage.destroy({ where: { product_id: ids.product }, ...force });
     if (ids.product) await db.productVariant.destroy({ where: { product_id: ids.product }, ...force });
     if (ids.product) await db.product.destroy({ where: { id: ids.product }, ...force });
+    if (ids.coupon) await db.coupon.destroy({ where: { id: ids.coupon }, ...force });
     if (ids.brand) await db.brand.destroy({ where: { id: ids.brand }, ...force });
     if (ids.category) await db.category.destroy({ where: { id: ids.category }, ...force });
     for (const addressId of ids.addresses || []) await db.address.destroy({ where: { id: addressId }, ...force });
@@ -114,6 +116,20 @@ integration("flujo real: catálogo, URL de imagen, inventario, carrito y checkou
   assert.equal(result.response.status, 201, result.body.message);
   ids.product = result.body.id;
 
+  const couponCode = `QA-${suffix}`.toUpperCase();
+  result = await api("/api/v1/marketing/coupons", {
+    method: "POST", token,
+    body: {
+      code: couponCode, description: "Cupón temporal para checkout guest",
+      discount_type: "fixed", discount_value: 5, max_uses: 1,
+      valid_from: new Date(Date.now() - 60 * 60 * 1000).toISOString(),
+      valid_to: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      is_active: true
+    }
+  });
+  assert.equal(result.response.status, 201, result.body.message);
+  ids.coupon = result.body.id;
+
   result = await api(`/api/v1/catalog/products/${ids.product}/variants`);
   assert.equal(result.response.status, 200, result.body.message);
   ids.variant = result.body[0].id;
@@ -159,13 +175,22 @@ integration("flujo real: catálogo, URL de imagen, inventario, carrito y checkou
   assert.equal(result.response.status, 201, result.body.message);
   assert.equal(result.body.subtotal, 25);
 
+  // Validación pública: un invitado puede aplicar un cupón general.
+  result = await api("/api/v1/marketing/coupons/validate", {
+    method: "POST", body: { code: couponCode, subtotal: 25 }
+  });
+  assert.equal(result.response.status, 200, result.body.message);
+  assert.equal(result.body.valid, true);
+  assert.equal(Number(result.body.discount_amount), 5);
+
   // Llamada real a Stripe en modo test: crea un PaymentIntent, no cobra una tarjeta.
   result = await api("/api/v1/sales/checkout/intent", {
-    method: "POST", body: { cart_id: ids.carts[0] }
+    method: "POST", body: { cart_id: ids.carts[0], coupon_code: couponCode }
   });
   assert.equal(result.response.status, 200, result.body.message);
   assert.match(result.body.payment_intent_id, /^pi_/);
-  assert.equal(result.body.total, 25);
+  assert.equal(result.body.discount, 5);
+  assert.equal(result.body.total, 20);
   const paymentIntentId = result.body.payment_intent_id;
 
   // Simula el frontend mediante el método Visa oficial de Stripe TEST.
@@ -179,7 +204,7 @@ integration("flujo real: catálogo, URL de imagen, inventario, carrito y checkou
   result = await api("/api/v1/sales/checkout/confirm", {
     method: "POST",
     body: {
-      cart_id: ids.carts[0], payment_method: "CARD", stripe_payment_intent_id: paymentIntentId,
+      cart_id: ids.carts[0], payment_method: "CARD", stripe_payment_intent_id: paymentIntentId, coupon_code: couponCode,
       guest_data: {
         email: `qa-card-${suffix}@example.com`, first_name: "QA", last_name: "Tarjeta",
         address: { country: "GT", city: "Guatemala", address_line1: "Calle QA 1" }
@@ -188,6 +213,7 @@ integration("flujo real: catálogo, URL de imagen, inventario, carrito y checkou
   });
   assert.equal(result.response.status, 201, result.body.message);
   assert.equal(result.body.status, "paid");
+  assert.equal(Number(result.body.total), 20);
   ids.orders = [result.body.order_id];
 
   const cardOrder = await db.order.findByPk(ids.orders[0]);
@@ -202,6 +228,10 @@ integration("flujo real: catálogo, URL de imagen, inventario, carrito y checkou
   ids.payments = [cardPayment.id];
   assert.equal(cardPayment.provider, "stripe");
   assert.equal(cardPayment.status, "completed");
+  const orderCoupon = await db.orderCoupon.findOne({ where: { order_id: cardOrder.id, coupon_id: ids.coupon } });
+  assert.equal(Number(orderCoupon.discount_amount), 5);
+  const redeemedCoupon = await db.coupon.findByPk(ids.coupon);
+  assert.equal(redeemedCoupon.used_count, 1);
 
   // Un segundo carrito confirma venta en efectivo como cliente autenticado.
   result = await api(`/api/v1/sales/carts/customer/${ids.customers[0]}`);
