@@ -1,0 +1,91 @@
+name: API Testing CI
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    # Levanta la base de datos efímera necesaria para las pruebas de integración y rutas
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: root
+          POSTGRES_DB: qa_ecommerce
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - name: Obtener código
+      uses: actions/checkout@v4
+
+    - name: Configurar Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Instalar dependencias
+      run: npm ci
+
+    - name: Construir esquema de Base de Datos
+      # Sincroniza los modelos con la base de datos usando tu script dedicado
+      run: node test/sync-db.js
+      env:
+        DB_USER: root
+        DB_PASSWORD: root
+        DB_NAME: qa_ecommerce
+        DB_HOST: localhost
+
+    - name: Verificar Servicios Externos
+      run: node test/verify-services.js
+      env:
+        DB_USER: root
+        DB_PASSWORD: root
+        DB_NAME: qa_ecommerce
+        DB_HOST: localhost
+        STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+
+    - name: Pruebas Unitarias y de Humo (Sin BD activa)
+      run: node --test test/api.smoke.test.js test/auth.service.test.js test/product-images.service.test.js
+      env:
+        JWT_SECRET: "test-secret"
+
+    - name: Auditoría de Rutas (GET requests)
+      run: node test/run-route-audit.js
+      env:
+        DB_USER: root
+        DB_PASSWORD: root
+        DB_NAME: qa_ecommerce
+        DB_HOST: localhost
+        RUN_ROUTE_AUDIT: "1"
+
+    - name: Pruebas de Integración End-to-End (Checkout)
+      run: node test/run-integration-tests.js
+      env:
+        DB_USER: root
+        DB_PASSWORD: root
+        DB_NAME: qa_ecommerce
+        DB_HOST: localhost
+        STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+        JWT_SECRET: "test-secret"
+        RUN_INTEGRATION: "1"
+
+    - name: Limpieza de Datos QA
+      if: always() # Se ejecuta incluso si las pruebas anteriores fallan
+      run: node test/cleanup-qa-data.js
+      env:
+        DB_USER: root
+        DB_PASSWORD: root
+        DB_NAME: qa_ecommerce
+        DB_HOST: localhost
