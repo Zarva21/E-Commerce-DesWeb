@@ -63,6 +63,7 @@ after(async () => {
     for (const customerId of ids.customers || []) await db.customer.destroy({ where: { id: customerId }, ...force });
     for (const userId of ids.users || []) await db.user.destroy({ where: { id: userId }, ...force });
     if (ids.customerRole) await db.role.destroy({ where: { id: ids.customerRole }, ...force });
+    if (ids.adminRole) await db.role.destroy({ where: { id: ids.adminRole }, ...force });
     await db.sequelize.close();
   }
   if (server) await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -74,6 +75,13 @@ integration("flujo real: catálogo, URL de imagen, inventario, carrito y checkou
     customerRole = await db.role.create({ name: "customer", description: "Creado temporalmente por QA" });
     ids.customerRole = customerRole.id;
   }
+
+  let adminRole = await db.role.findOne({ where: { name: "admin" } });
+  if (!adminRole) {
+    adminRole = await db.role.create({ name: "admin", description: "Creado temporalmente por QA" });
+    ids.adminRole = adminRole.id;
+  }
+
 
   const email = `qa-admin-${suffix}@example.com`;
   let result = await api("/api/v1/users/auth/signup", {
