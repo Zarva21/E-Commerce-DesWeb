@@ -1,0 +1,10 @@
+.logo { display: flex; align-items: center; gap: 10px; }
+.logo-mark { position: relative; width: 22px; height: 26px; display: inline-flex; flex-direction: column; justify-content: center; gap: 4px; }
+.logo-bar { height: 5px; border-radius: 2px; transform: skewX(-18deg); }
+.logo-bar-1 { width: 100%; background: var(--violet-900); }
+.logo-bar-2 { width: 72%; background: var(--violet-700); }
+.logo-bar-3 { width: 44%; background: var(--lime); }
+.logo-text { font-family: var(--font-display); font-weight: 600; font-size: 30px; letter-spacing: 0.5px; line-height: 1; }
+.logo-strong { color: var(--violet-900); }
+.logo-light { color: var(--violet-400); }
+.logo-tag { font-family: var(--font-body); font-size: 10px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); background: var(--violet-100); padding: 3px 7px; border-radius: 4px; margin-left: 4px; }

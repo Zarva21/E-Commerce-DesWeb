@@ -1,0 +1,43 @@
+// TODO: reemplazar por el fetch real a la API cuando esté lista.
+export const MOCK_INVENTORY = [
+  {
+    id: "zapato-1",
+    image: "/img/zapato1.jpg",
+    name: "Tacos F50 Pro Firm",
+    brand: "Adidas",
+    category: "Tacos",
+    gender: "Hombre",
+    price: 1850,
+    stock: 12,
+  },
+  {
+    id: "zapato-2",
+    image: "/img/zapato2.jpg",
+    name: "Nike Pegasus 42",
+    brand: "Nike",
+    category: "Calzado",
+    gender: "Hombre",
+    price: 1850,
+    stock: 8,
+  },
+  {
+    id: "zapato-3",
+    image: "/img/zapato1.jpg",
+    name: "Ultraboost Light W",
+    brand: "Adidas",
+    category: "Calzado",
+    gender: "Mujer",
+    price: 1650,
+    stock: 3,
+  },
+  {
+    id: "playera-1",
+    image: "/img/playera1.jpg",
+    name: "Playera Dri-FIT",
+    brand: "Nike",
+    category: "Ropa",
+    gender: "Hombre",
+    price: 180,
+    stock: 0,
+  },
+];

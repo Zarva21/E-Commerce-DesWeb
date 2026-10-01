@@ -1,0 +1,124 @@
+.cart-item {
+  display: grid;
+  grid-template-columns: 88px 1fr auto auto 32px;
+  align-items: center;
+  gap: 18px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--divider);
+}
+
+.cart-item-image {
+  width: 88px;
+  height: 88px;
+  background: var(--violet-100);
+  overflow: hidden;
+}
+
+.cart-item-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cart-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cart-item-brand {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--violet-600);
+}
+
+.cart-item-name {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cart-item-gender {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.cart-item-qty {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cart-item-qty button {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--violet-700);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cart-item-qty button:hover {
+  background: var(--violet-100);
+}
+
+.cart-item-qty span {
+  min-width: 16px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.cart-item-price {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--violet-900);
+  white-space: nowrap;
+}
+
+.cart-item-remove {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  justify-self: center;
+}
+
+.cart-item-remove:hover {
+  color: var(--violet-700);
+}
+
+@media (max-width: 620px) {
+  .cart-item {
+    grid-template-columns: 64px 1fr;
+    grid-template-areas:
+      "image info"
+      "image qty"
+      "image price"
+      "image remove";
+    row-gap: 6px;
+  }
+  .cart-item-image { grid-area: image; width: 64px; height: 64px; }
+  .cart-item-info { grid-area: info; }
+  .cart-item-qty { grid-area: qty; }
+  .cart-item-price { grid-area: price; }
+  .cart-item-remove { grid-area: remove; justify-self: start; }
+}

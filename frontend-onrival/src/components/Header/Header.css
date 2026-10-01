@@ -1,0 +1,60 @@
+.header { position: relative; background: var(--surface); }
+.header-inner { max-width: 1180px; margin: 0 auto; padding: 18px 0; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.header-stripe { height: 4px; width: 100%; background: linear-gradient(to right, var(--violet-600), var(--violet-900)); }
+.logo-button { border: none; background: none; padding: 0; cursor: pointer; display: inline-flex; }
+
+.nav { display: flex; align-items: center; flex: 1; justify-content: center; }
+.nav-item { position: relative; border: none; background: none; cursor: pointer; font-family: var(--font-body); font-weight: 700; font-size: 13px; letter-spacing: 0.4px; color: var(--ink); padding: 8px 18px; }
+.nav-item + .nav-item { border-left: 1px solid var(--divider); }
+.nav-item:hover { color: var(--violet-700); }
+.nav-item-active { color: var(--violet-700); }
+.nav-item-active::after { content: ""; position: absolute; left: 18px; right: 18px; bottom: -2px; height: 2px; background: var(--violet-700); }
+@media (max-width: 780px) { .nav { display: none; } }
+
+.auth-group { display: flex; align-items: center; gap: 8px; }
+
+.btn-login { font-family: var(--font-body); font-weight: 700; font-size: 14px; color: #fff; background: var(--violet-700); border: none; padding: 11px 22px; cursor: pointer; transform: skewX(-10deg); box-shadow: 0 6px 16px rgba(109, 40, 217, 0.28); transition: background 0.15s ease, transform 0.15s ease; }
+.btn-login span { display: inline-block; transform: skewX(10deg); }
+.btn-login:hover { background: var(--violet-600); transform: skewX(-10deg) translateY(-1px); }
+.btn-ghost { background: transparent; color: var(--violet-700); box-shadow: none; border: 1.5px solid var(--violet-700); }
+.btn-ghost:hover { background: var(--violet-100); }
+
+/* botones de ícono: perfil / carrito / cerrar sesión (logueado), o solo carrito (invitado) */
+.icon-btn {
+  position: relative;
+  border: none;
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.icon-btn:hover {
+  background: var(--violet-100);
+  color: var(--violet-700);
+}
+
+.cart-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--violet-700);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+@media (max-width: 520px) { .header-inner { padding: 14px 16px; } }

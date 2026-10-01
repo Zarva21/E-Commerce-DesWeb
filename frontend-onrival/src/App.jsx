@@ -1,0 +1,124 @@
+import { useState } from "react";
+import { useCart } from "./context/CartContext";
+import Header from "./components/Header/Header";
+import HeroCarousel from "./components/Hero/HeroCarousel";
+import CatalogTeaser from "./components/Home/CatalogTeaser";
+import HomeProductCarousel from "./components/Home/HomeProductCarousel";
+import CatalogSection from "./components/Catalog/CatalogSection";
+import ProductDetail from "./components/Product/ProductDetail";
+import LoginPanel from "./components/Auth/LoginPanel";
+import CartPage from "./components/Cart/CartPage";
+import ShippingPage from "./components/Checkout/ShippingPage";
+import CheckoutPage from "./components/Checkout/CheckoutPage";
+import AdminApp from "./admin/AdminApp";
+import "./styles/tokens.css";
+
+export default function App() {
+  const { count } = useCart();
+
+  // "home" | "catalog" | "product" | "cart" | "shipping" | "checkout" | "admin"
+  const [view, setView] = useState("home");
+  const [activeSection, setActiveSection] = useState(null);
+  const [selectedProductId, setSelectedProductId] = useState(null);
+  const [shippingData, setShippingData] = useState(null);
+
+  // null = no logueado · "cliente" · "admin"
+  const [userRole, setUserRole] = useState(null);
+  const isLoggedIn = userRole !== null;
+
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginTab, setLoginTab] = useState("login");
+
+  const handleSelectSection = (sectionId) => { setActiveSection(sectionId); setView("catalog"); };
+  const handleSelectProduct = (productId) => { setSelectedProductId(productId); setView("product"); };
+  const handleLogoClick = () => setView("home");
+  const handleOpenCart = () => setView("cart");
+
+  const openLogin = (tab) => {
+    setLoginTab(tab);
+    setLoginOpen(true);
+  };
+
+  const handleLoginSuccess = (role) => {
+    // TODO: cuando haya backend, "role" viene de la respuesta real del login
+    setUserRole(role);
+    setLoginOpen(false);
+    if (role === "admin") setView("admin");
+  };
+
+  const handleLogout = () => {
+    setUserRole(null);
+    setView("home");
+  };
+
+  if (view === "admin" && userRole === "admin") {
+    return <AdminApp onExitAdmin={handleLogout} />;
+  }
+
+  return (
+    <div className="app">
+      <Header
+        activeSection={view === "catalog" ? activeSection : null}
+        onSelectSection={handleSelectSection}
+        onLogoClick={handleLogoClick}
+        isLoggedIn={isLoggedIn}
+        onOpenLogin={openLogin}
+        onOpenCart={handleOpenCart}
+        onLogout={handleLogout}
+        cartCount={count}
+      />
+
+      {view === "home" && (
+        <>
+          <HeroCarousel />
+          <CatalogTeaser onViewCatalog={() => handleSelectSection("catalogo")} />
+          <HomeProductCarousel onSelectProduct={handleSelectProduct} onViewCatalog={() => handleSelectSection("catalogo")} />
+        </>
+      )}
+
+      {view === "catalog" && (
+        <CatalogSection section={activeSection} onSelectSection={handleSelectSection} onSelectProduct={handleSelectProduct} />
+      )}
+
+      {view === "product" && (
+        <ProductDetail
+          productId={selectedProductId}
+          onBack={() => setView("catalog")}
+          onGoToCart={() => setView("cart")}
+        />
+      )}
+
+      {view === "cart" && (
+        <CartPage onContinueShopping={() => handleSelectSection("catalogo")} onCheckout={() => setView("shipping")} />
+      )}
+
+      {view === "shipping" && (
+        <ShippingPage
+          onBackToCart={() => setView("cart")}
+          onContinue={(data) => {
+            setShippingData(data);
+            setView("checkout");
+          }}
+        />
+      )}
+
+      {view === "checkout" && (
+        <CheckoutPage
+          shippingData={shippingData}
+          onBack={() => setView("shipping")}
+          onFinish={() => {
+            setShippingData(null);
+            setView("home");
+          }}
+        />
+      )}
+
+      <LoginPanel
+        open={loginOpen}
+        initialTab={loginTab}
+        onClose={() => setLoginOpen(false)}
+        onLoginSuccess={handleLoginSuccess}
+      />
+    </div>
+  );
+}

@@ -1,0 +1,13 @@
+@import url('https://fonts.googleapis.com/css2?family=Teko:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+:root {
+  --bg: #FAF9FF; --surface: #FFFFFF; --line: #E7E1F7; --divider: #C7C4CF;
+  --violet-900: #2E0F59; --violet-700: #6D28D9; --violet-600: #7C3AED; --violet-400: #A78BFA; --violet-100: #EFE9FD;
+  --lime: #D8FF4F; --ink: #201333; --muted: #79708C;
+  --danger: #D9376E; --danger-bg: #FCE7EF;
+  --success: #1E9E6B; --success-bg: #E4F7EE;
+  --warning: #B9791A; --warning-bg: #FCF1DD;
+  --sidebar-width: 236px;
+  --font-display: 'Teko', sans-serif; --font-body: 'Manrope', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); }

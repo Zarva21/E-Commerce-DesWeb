@@ -1,0 +1,110 @@
+/* Estilos compartidos de tabla, usados por Inventario/Usuarios/Pedidos/Ofertas */
+
+.data-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.data-table thead th {
+  text-align: left;
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--divider);
+  background: var(--bg);
+}
+
+.data-table tbody td {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 13.5px;
+  color: var(--ink);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.data-table tbody tr:hover {
+  background: var(--violet-100);
+}
+
+.data-cell-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.data-cell-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: var(--violet-100);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.data-cell-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.data-cell-title {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.data-cell-muted {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.data-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.data-action-btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 12px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.data-action-btn:hover {
+  border-color: var(--violet-600);
+  color: var(--violet-700);
+}
+
+.data-action-btn-danger:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.data-empty {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13.5px;
+  font-weight: 600;
+}
