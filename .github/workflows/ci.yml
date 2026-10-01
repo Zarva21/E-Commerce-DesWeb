@@ -46,7 +46,7 @@ jobs:
       run: npm ci
 
     - name: Construir esquema de Base de Datos
-      run: node test/sync-db.js
+      run: node scripts/sync-db.js
       env:
         DB_USER: root
         DB_PASSWORD: root
@@ -54,7 +54,7 @@ jobs:
         DB_HOST: localhost
 
     - name: Verificar Servicios Externos
-      run: node test/verify-services.js
+      run: node scripts/verify-services.js
       env:
         DB_USER: root
         DB_PASSWORD: root
@@ -77,7 +77,7 @@ jobs:
         RUN_ROUTE_AUDIT: "1"
 
     - name: Pruebas de Integración (Checkout)
-      run: node test/run-integration-tests.js
+      run: node scripts/run-integration-tests.js
       env:
         DB_USER: root
         DB_PASSWORD: root
@@ -89,7 +89,7 @@ jobs:
 
     - name: Limpieza de Datos QA
       if: always()
-      run: node test/cleanup-qa-data.js
+      run: node scripts/cleanup-qa-data.js
       env:
         DB_USER: root
         DB_PASSWORD: root
