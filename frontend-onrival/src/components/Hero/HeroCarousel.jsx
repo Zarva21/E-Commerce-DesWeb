@@ -2,7 +2,7 @@ import { useState } from "react";
 import { HERO_SLIDES } from "./heroSlides";
 import "./HeroCarousel.css";
 
-export default function HeroCarousel() {
+export default function HeroCarousel({ onSelectProduct }) {
   const [index, setIndex] = useState(0);
   const total = HERO_SLIDES.length;
   const slide = HERO_SLIDES[index];
@@ -20,7 +20,11 @@ export default function HeroCarousel() {
           <p className="hero-eyebrow">{slide.eyebrow}</p>
           <h1 className="hero-title">{slide.title}</h1>
           {slide.ctaLabel && (
-            <button type="button" className="hero-cta">
+            <button
+              type="button"
+              className="hero-cta"
+              onClick={() => slide.productId && onSelectProduct?.(slide.productId)}
+            >
               {slide.ctaLabel}
             </button>
           )}

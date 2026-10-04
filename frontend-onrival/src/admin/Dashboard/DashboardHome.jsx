@@ -1,5 +1,5 @@
 import { MOCK_INVENTORY } from "../Inventory/mockInventory";
-import { MOCK_EMPLOYEES } from "../Users/mockEmployees";
+import { MOCK_EMPLOYEES } from "../Users/mockUsers";
 import { MOCK_ORDERS } from "../Orders/mockOrders";
 import { MOCK_OFFERS } from "../Offers/mockOffers";
 import "./DashboardHome.css";
@@ -12,9 +12,16 @@ const formatPrice = (value) =>
   }).format(value);
 
 export default function DashboardHome({ onNavigate }) {
+  // Sincronización con modelos actualizados del backend/MOCKs:
   const pendingOrders = MOCK_ORDERS.filter((o) => o.status === "Pendiente").length;
-  const activeOffers = MOCK_OFFERS.filter((o) => o.active).length;
-  const salesToday = MOCK_ORDERS.reduce((sum, o) => sum + o.total, 0);
+  
+  // Soporta 'is_active' (nuevo backend Sequelize) o 'active' (soporte heredado)
+  const activeOffers = MOCK_OFFERS.filter((o) => o.is_active ?? o.active).length;
+
+  // Soporta 'is_active', 'active' o 'status === "Activo"'
+  const activeEmployees = MOCK_EMPLOYEES.filter(
+    (e) => e.is_active ?? e.active ?? e.status === "Activo"
+  ).length;
 
   const stats = [
     {
@@ -25,8 +32,8 @@ export default function DashboardHome({ onNavigate }) {
     },
     {
       id: "usuarios",
-      label: "Empleados activos",
-      value: MOCK_EMPLOYEES.filter((e) => e.status === "Activo").length,
+      label: "Empleados / Usuarios activos",
+      value: activeEmployees,
       hint: "Ver usuarios →",
     },
     {
@@ -37,7 +44,7 @@ export default function DashboardHome({ onNavigate }) {
     },
     {
       id: "ofertas",
-      label: "Ofertas activas",
+      label: "Ofertas / Cupones activos",
       value: activeOffers,
       hint: "Ver ofertas →",
     },

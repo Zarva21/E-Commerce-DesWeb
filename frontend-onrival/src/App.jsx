@@ -8,6 +8,7 @@ import CatalogSection from "./components/Catalog/CatalogSection";
 import ProductDetail from "./components/Product/ProductDetail";
 import LoginPanel from "./components/Auth/LoginPanel";
 import CartPage from "./components/Cart/CartPage";
+import ProfilePage from "./components/Profile/ProfilePage"; // <-- Importar ProfilePage
 import ShippingPage from "./components/Checkout/ShippingPage";
 import CheckoutPage from "./components/Checkout/CheckoutPage";
 import AdminApp from "./admin/AdminApp";
@@ -16,13 +17,12 @@ import "./styles/tokens.css";
 export default function App() {
   const { count } = useCart();
 
-  // "home" | "catalog" | "product" | "cart" | "shipping" | "checkout" | "admin"
+  // "home" | "catalog" | "product" | "cart" | "profile" | "shipping" | "checkout" | "admin"
   const [view, setView] = useState("home");
   const [activeSection, setActiveSection] = useState(null);
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [shippingData, setShippingData] = useState(null);
 
-  // null = no logueado · "cliente" · "admin"
   const [userRole, setUserRole] = useState(null);
   const isLoggedIn = userRole !== null;
 
@@ -33,6 +33,7 @@ export default function App() {
   const handleSelectProduct = (productId) => { setSelectedProductId(productId); setView("product"); };
   const handleLogoClick = () => setView("home");
   const handleOpenCart = () => setView("cart");
+  const handleOpenProfile = () => setView("profile"); // <-- Función para abrir el perfil
 
   const openLogin = (tab) => {
     setLoginTab(tab);
@@ -40,7 +41,6 @@ export default function App() {
   };
 
   const handleLoginSuccess = (role) => {
-    // TODO: cuando haya backend, "role" viene de la respuesta real del login
     setUserRole(role);
     setLoginOpen(false);
     if (role === "admin") setView("admin");
@@ -63,6 +63,7 @@ export default function App() {
         onLogoClick={handleLogoClick}
         isLoggedIn={isLoggedIn}
         onOpenLogin={openLogin}
+        onOpenProfile={handleOpenProfile} // <-- Se pasa al Header
         onOpenCart={handleOpenCart}
         onLogout={handleLogout}
         cartCount={count}
@@ -70,7 +71,7 @@ export default function App() {
 
       {view === "home" && (
         <>
-          <HeroCarousel />
+          <HeroCarousel onSelectProduct={handleSelectProduct} />
           <CatalogTeaser onViewCatalog={() => handleSelectSection("catalogo")} />
           <HomeProductCarousel onSelectProduct={handleSelectProduct} onViewCatalog={() => handleSelectSection("catalogo")} />
         </>
@@ -92,6 +93,12 @@ export default function App() {
         <CartPage onContinueShopping={() => handleSelectSection("catalogo")} onCheckout={() => setView("shipping")} />
       )}
 
+      {view === "profile" && (
+        <ProfilePage
+          onBackToHome={() => setView("home")}
+        />
+      )}
+      
       {view === "shipping" && (
         <ShippingPage
           onBackToCart={() => setView("cart")}

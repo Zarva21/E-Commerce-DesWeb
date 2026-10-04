@@ -14,6 +14,7 @@ export default function Header({
   onLogoClick,
   isLoggedIn,
   onOpenLogin,
+  onOpenProfile, // <-- Nueva prop
   onOpenCart,
   onLogout,
   cartCount = 0,
@@ -40,7 +41,8 @@ export default function Header({
 
         {isLoggedIn ? (
           <div className="auth-group">
-            <button type="button" className="icon-btn" aria-label="Mi perfil">
+            {/* Se agrega onClick para abrir el perfil */}
+            <button type="button" className="icon-btn" aria-label="Mi perfil" onClick={onOpenProfile}>
               <ProfileIcon />
             </button>
             <button type="button" className="icon-btn" aria-label="Carrito" onClick={onOpenCart}>
