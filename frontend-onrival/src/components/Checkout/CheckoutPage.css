@@ -11,6 +11,30 @@
 .checkout-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink); }
 .checkout-field input { font-family: var(--font-body); font-size: 14px; font-weight: 500; padding: 11px 12px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); outline: none; transition: border-color 0.15s ease; }
 .checkout-field input:focus { border-color: var(--violet-600); }
+
+/* --- Stripe Integration --- */
+.stripe-input-wrapper {
+  padding: 11px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.stripe-input-wrapper .StripeElement {
+  width: 100%;
+}
+.stripe-input-wrapper.StripeElement--focus {
+  border-color: var(--violet-600);
+}
+.stripe-input-wrapper.StripeElement--invalid {
+  border-color: #ef4444;
+}
+
 .checkout-submit { margin-top: 8px; border: none; background: var(--violet-700); color: #fff; font-family: var(--font-body); font-weight: 800; font-size: 14px; letter-spacing: 0.3px; padding: 14px 0; cursor: pointer; transform: skewX(-10deg); transition: background 0.15s ease; }
 .checkout-submit span { display: inline-block; transform: skewX(10deg); }
 .checkout-submit:hover { background: var(--violet-600); }

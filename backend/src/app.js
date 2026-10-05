@@ -14,7 +14,19 @@ const errorHandler = require("./middlewares/error.middleware.js");
 const app = express();
 
 // 2. Middlewares Globales
-app.use(cors()); // TODO: restringir origin (ej. { origin: "http://localhost:8080" }) antes de producción
+app.use(cors({
+  origin: [
+    "http://localhost:5173", // Vite en desarrollo
+    "http://localhost:3000", // Frontend alternativo
+    "http://localhost",      // Producción / Nginx en Docker
+    "http://127.0.0.1:5173"
+  ],
+  credentials: true, // Crucial para permitir envío de cookies (Refresh Token) y headers Authorization
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

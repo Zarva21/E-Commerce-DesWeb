@@ -5,6 +5,7 @@ const config = require("../../../config/auth.config");
 
 const User = db.user;
 const Role = db.role;
+const Customer = db.customer;
 
 const httpError = (message, status) => {
   const error = new Error(message);
@@ -41,11 +42,36 @@ exports.signin = async ({ email, password }) => {
   const passwordIsValid = bcrypt.compareSync(password, user.password_hash);
   if (!passwordIsValid) throw httpError("Correo o contraseña incorrectos.", 401);
 
-  const token = jwt.sign({ id: user.id, role_id: user.role_id }, config.secret, {
-    expiresIn: config.expiresIn
-  });
+ // 1. Buscamos el customer asociado a este user_id
+  const customer = await Customer.findOne({ where: { user_id: user.id } });
 
-  return { id: user.id, email: user.email, accessToken: token, expiresIn: config.expiresIn };
+  // 2. Metemos customer_id en el token JWT por seguridad y comodidad
+  const token = jwt.sign(
+    {
+      id: user.id,
+      role_id: user.role_id,
+      customer_id: customer ? customer.id : null,
+    },
+    config.secret,
+    { expiresIn: config.expiresIn }
+  );
+
+  // 3. Retornamos customer_id y el perfil al frontend
+  return {
+    id: user.id, // user_id (ej: 59)
+    customer_id: customer ? customer.id : null,
+    email: user.email,
+    customer: customer
+      ? {
+          id: customer.id,
+          first_name: customer.first_name,
+          last_name: customer.last_name,
+          phone: customer.phone,
+        }
+      : null,
+    accessToken: token,
+    expiresIn: config.expiresIn,
+  };
 };
 
 /**
@@ -67,15 +93,25 @@ exports.convertGuestToAccount = async ({ email, password }) => {
   user.is_guest = false;
   await user.save();
 
-  const token = jwt.sign({ id: user.id, role_id: user.role_id }, config.secret, {
-    expiresIn: config.expiresIn
-  });
+  // Buscar el customer ya existente de esa compra previa
+  const customer = await Customer.findOne({ where: { user_id: user.id } });
+
+  const token = jwt.sign(
+    {
+      id: user.id,
+      role_id: user.role_id,
+      customer_id: customer ? customer.id : null,
+    },
+    config.secret,
+    { expiresIn: config.expiresIn }
+  );
 
   return {
     id: user.id,
+    customer_id: customer ? customer.id : null,
     email: user.email,
     accessToken: token,
     expiresIn: config.expiresIn,
-    message: "Cuenta creada correctamente. Tu historial de compras como invitado ya está vinculado."
+    message: "Cuenta creada correctamente. Tu historial de compras como invitado ya está vinculado.",
   };
 };
