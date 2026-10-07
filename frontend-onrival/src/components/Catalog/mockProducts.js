@@ -40,6 +40,17 @@ export const MOCK_PRODUCTS = {
       onSale: true,
       price: 950,
     },
+    {
+      id: "jersey-2",
+      image: "/img/real-madrid-home-26-27.jpg",
+      brand: "Adidas",
+      name: "Real Madrid CF Jersey Local 2026/2027",
+      gender: "Hombre",
+      category: "jersey",
+      sport: "Fútbol",
+      onSale: true,
+      price: 950,
+    },
   ],
   mujer: [
     {

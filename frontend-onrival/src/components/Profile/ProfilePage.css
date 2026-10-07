@@ -1,0 +1,329 @@
+/* ---------- ESTRUCTURA GENERAL ---------- */
+.profile-page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 48px 28px 100px;
+}
+
+/* ---------- BOTÓN VOLVER ---------- */
+.profile-back {
+  background: transparent;
+  border: none;
+  color: var(--violet-600);
+  font-family: var(--font-body);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 24px;
+  display: inline-flex;
+  align-items: center;
+  transition: color 0.15s ease;
+}
+
+.profile-back:hover {
+  color: var(--violet-800);
+  text-decoration: underline;
+}
+
+/* ---------- ENCABEZADO ---------- */
+.profile-eyebrow {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--violet-600);
+  margin: 0 0 4px;
+}
+
+.profile-head h1 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 36px;
+  color: var(--violet-900);
+  margin: 0 0 36px;
+}
+
+/* ---------- LAYOUT LATERAL (SIDEBAR + CONTENT) ---------- */
+.profile-layout {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 40px;
+  align-items: start;
+}
+
+/* ---------- SIDEBAR / NAVEGACIÓN IZQUIERDA ---------- */
+.profile-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-right: 1px solid var(--divider);
+  padding-right: 20px;
+}
+
+.profile-tab-btn {
+  background: transparent;
+  border: none;
+  border-left: 3px solid transparent;
+  padding: 12px 16px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  text-align: left;
+  transition: all 0.2s ease;
+}
+
+.profile-tab-btn:hover {
+  color: var(--violet-900);
+  background: var(--violet-100);
+}
+
+.profile-tab-active {
+  color: var(--violet-900);
+  background: var(--surface);
+  border-left-color: var(--violet-700);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.profile-orders-count {
+  background: var(--violet-700);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+/* ---------- PANEL DE CONTENIDO ---------- */
+.profile-panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  padding: 32px;
+}
+
+.panel-title-group {
+  margin-bottom: 28px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--divider);
+}
+
+.panel-title-group h2 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 22px;
+  color: var(--violet-900);
+  margin: 0 0 4px;
+}
+
+.panel-title-group p {
+  font-size: 13px;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* ---------- SOBRE MI CUENTA (GRID) ---------- */
+.profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.profile-card-item {
+  background: #fafafa;
+  border: 1px solid var(--line);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.profile-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--muted);
+  letter-spacing: 0.8px;
+}
+
+.profile-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  word-break: break-all;
+}
+
+/* ---------- MIS PEDIDOS (LISTA) ---------- */
+.orders-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.order-card {
+  border: 1px solid var(--line);
+  background: #fff;
+  transition: border-color 0.15s ease;
+}
+
+.order-card:hover {
+  border-color: var(--violet-600);
+}
+
+.order-card-header {
+  background: #fafafa;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.order-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.order-id {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--violet-900);
+}
+
+.order-date {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.order-status {
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 4px 10px;
+  letter-spacing: 0.5px;
+}
+
+.badge-entregado {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+.badge-en-camino {
+  background: #feefc3;
+  color: #b06000;
+}
+
+.order-card-body {
+  padding: 16px 20px;
+}
+
+.order-items-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.order-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+}
+
+.item-name {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.item-size {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.item-qty {
+  color: var(--violet-700);
+  font-weight: 700;
+}
+
+.item-price {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.order-card-footer {
+  padding: 12px 20px;
+  background: #fafafa;
+  border-top: 1px dashed var(--line);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--violet-900);
+}
+
+.order-total-price {
+  font-size: 16px;
+  font-family: var(--font-display);
+}
+
+.orders-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--muted);
+  font-size: 14px;
+  background: #fafafa;
+  border: 1px dashed var(--line);
+}
+
+/* ---------- RESPONSIVE ---------- */
+@media (max-width: 768px) {
+  .profile-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .profile-sidebar {
+    border-right: none;
+    padding-right: 0;
+    flex-direction: row;
+    border-bottom: 1px solid var(--divider);
+    padding-bottom: 12px;
+  }
+
+  .profile-tab-btn {
+    border-left: none;
+    border-bottom: 3px solid transparent;
+    padding: 10px 12px;
+  }
+
+  .profile-tab-active {
+    border-left-color: transparent;
+    border-bottom-color: var(--violet-700);
+  }
+}
+
+@media (max-width: 520px) {
+  .profile-page {
+    padding: 32px 18px 70px;
+  }
+
+  .profile-panel {
+    padding: 20px;
+  }
+
+  .order-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+}

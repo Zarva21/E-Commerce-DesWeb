@@ -2,7 +2,7 @@ import { useState } from "react";
 import AdminLayout from "./Layout/AdminLayout";
 import DashboardHome from "./Dashboard/DashboardHome";
 import InventoryPage from "./Inventory/InventoryPage";
-import EmployeesPage from "./Users/EmployeesPage";
+import EmployeesPage from "./Users/UsersPage";
 import OrdersPage from "./Orders/OrdersPage";
 import OrderDetail from "./Orders/OrderDetail";
 import OffersPage from "./Offers/OffersPage";

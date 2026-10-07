@@ -3,6 +3,7 @@
 export const HERO_SLIDES = [
   {
     id: "slide-1",
+    productId: "balon-final",
     image: "/img/final-trionda.jpg",
     eyebrow: "NUEVO BALÓN",
     title: "ADIDAS TRIONDA FINAL PRO",
@@ -10,6 +11,7 @@ export const HERO_SLIDES = [
   },
   {
     id: "slide-2",
+    productId: "jersey-2",
     image: "/img/real-madrid-26-27-png.png",
     eyebrow: "Nueva equipación",
     title: " NUEVA PIEL DEL REAL MADRID TEMPORADA 2026/2027",

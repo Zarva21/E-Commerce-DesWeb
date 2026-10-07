@@ -11,6 +11,7 @@ import CatalogSection from "./components/Catalog/CatalogSection";
 import ProductDetail from "./components/Product/ProductDetail";
 import LoginPanel from "./components/Auth/LoginPanel";
 import CartPage from "./components/Cart/CartPage";
+import ProfilePage from "./components/Profile/ProfilePage"; // <-- Importar ProfilePage
 import ShippingPage from "./components/Checkout/ShippingPage";
 import CheckoutPage from "./components/Checkout/CheckoutPage";
 import AdminApp from "./admin/AdminApp";
@@ -38,6 +39,7 @@ export default function App() {
   const handleSelectProduct = (productId) => { setSelectedProductId(productId); setView("product"); };
   const handleLogoClick = () => setView("home");
   const handleOpenCart = () => setView("cart");
+  const handleOpenProfile = () => setView("profile"); // <-- Función para abrir el perfil
 
   const openLogin = (tab) => {
     setLoginTab(tab);
@@ -69,6 +71,7 @@ export default function App() {
         onLogoClick={handleLogoClick}
         isLoggedIn={isLoggedIn}
         onOpenLogin={openLogin}
+        onOpenProfile={handleOpenProfile} // <-- Se pasa al Header
         onOpenCart={handleOpenCart}
         onLogout={handleLogout}
         cartCount={count}
@@ -76,7 +79,7 @@ export default function App() {
 
       {view === "home" && (
         <>
-          <HeroCarousel />
+          <HeroCarousel onSelectProduct={handleSelectProduct} />
           <CatalogTeaser onViewCatalog={() => handleSelectSection("catalogo")} />
           <HomeProductCarousel onSelectProduct={handleSelectProduct} onViewCatalog={() => handleSelectSection("catalogo")} />
         </>
@@ -98,6 +101,12 @@ export default function App() {
         <CartPage onContinueShopping={() => handleSelectSection("catalogo")} onCheckout={() => setView("shipping")} />
       )}
 
+      {view === "profile" && (
+        <ProfilePage
+          onBackToHome={() => setView("home")}
+        />
+      )}
+      
       {view === "shipping" && (
         <ShippingPage
           onBackToCart={() => setView("cart")}
