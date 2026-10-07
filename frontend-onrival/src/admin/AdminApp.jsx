@@ -1,6 +1,7 @@
 import { useState } from "react";
 import AdminLayout from "./Layout/AdminLayout";
 import DashboardHome from "./Dashboard/DashboardHome";
+import CatalogPage from "./Catalog/CatalogPage";
 import InventoryPage from "./Inventory/InventoryPage";
 import EmployeesPage from "./Users/UsersPage";
 import OrdersPage from "./Orders/OrdersPage";
@@ -21,6 +22,7 @@ export default function AdminApp({ onExitAdmin }) {
   return (
     <AdminLayout activeView={view} onSelectView={handleSelectView} onExitAdmin={onExitAdmin}>
       {view === "dashboard" && <DashboardHome onNavigate={handleSelectView} />}
+      {view === "catalogo" && <CatalogPage />}
       {view === "inventario" && <InventoryPage />}
       {view === "usuarios" && <EmployeesPage />}
 

@@ -7,7 +7,6 @@ export const PRICE_RANGE = { min: 0, max: 2000 };
 export const DEFAULT_FILTERS = {
   categoria: null,
   marca: null,
-  deporte: null,
   oferta: false,
   priceMin: PRICE_RANGE.min,
   priceMax: PRICE_RANGE.max,

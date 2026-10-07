@@ -12,22 +12,22 @@ const formatPrice = (value) =>
   }).format(value);
 
 export default function DashboardHome({ onNavigate }) {
-  // Sincronización con modelos actualizados del backend/MOCKs:
   const pendingOrders = MOCK_ORDERS.filter((o) => o.status === "Pendiente").length;
-  
-  // Soporta 'is_active' (nuevo backend Sequelize) o 'active' (soporte heredado)
   const activeOffers = MOCK_OFFERS.filter((o) => o.is_active ?? o.active).length;
-
-  // Soporta 'is_active', 'active' o 'status === "Activo"'
   const activeEmployees = MOCK_EMPLOYEES.filter(
     (e) => e.is_active ?? e.active ?? e.status === "Activo"
+  ).length;
+
+  // Conteo de variantes en alerta de bajo stock (quantity_on_hand <= reorder_level)
+  const lowStockCount = MOCK_INVENTORY.filter(
+    (item) => item.quantity_on_hand <= item.reorder_level
   ).length;
 
   const stats = [
     {
       id: "inventario",
-      label: "Productos en inventario",
-      value: MOCK_INVENTORY.length,
+      label: "Total Ítems / Stock Bajo",
+      value: `${MOCK_INVENTORY.length} / ${lowStockCount}`,
       hint: "Ver inventario →",
     },
     {
