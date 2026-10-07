@@ -2,6 +2,7 @@ import "./Topbar.css";
 
 const TITLES = {
   dashboard: "Panel general",
+  catalogo: "Catálogo de Productos",
   inventario: "Inventario",
   usuarios: "Usuarios",
   pedidos: "Pedidos",

@@ -2,11 +2,12 @@ import Logo from "../../components/Logo/Logo";
 import "./Sidebar.css";
 
 const NAV_ITEMS = [
-  { id: "dashboard", label: "Panel general"},
-  { id: "inventario", label: "Inventario"},
-  { id: "usuarios", label: "Usuarios"},
-  { id: "pedidos", label: "Pedidos"},
-  { id: "ofertas", label: "Ofertas"},
+  { id: "dashboard", label: "Panel general" },
+  { id: "catalogo", label: "Catálogo" },
+  { id: "inventario", label: "Inventario" },
+  { id: "usuarios", label: "Usuarios" },
+  { id: "pedidos", label: "Pedidos" },
+  { id: "ofertas", label: "Ofertas" },
 ];
 
 export default function Sidebar({ activeView, onSelectView, onExitAdmin }) {
