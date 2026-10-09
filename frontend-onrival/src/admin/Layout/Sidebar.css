@@ -3,10 +3,13 @@
   flex-shrink: 0;
   background: var(--surface);
   border-right: 1px solid var(--line);
-  min-height: 100vh;
+  height: 100vh; /* Cambiado de min-height a height */
+  position: sticky;
+  top: 0;
   display: flex;
   flex-direction: column;
 }
+
 .sidebar-logo {
   padding: 22px 20px;
   border-bottom: 1px solid var(--line);
@@ -18,6 +21,7 @@
   padding: 14px 12px;
   gap: 2px;
   flex: 1;
+  overflow-y: auto; /* Permite scroll interno si los ítems de menú no caben en una pantalla muy corta */
 }
 
 .sidebar-link {
@@ -78,6 +82,16 @@
 }
 
 @media (max-width: 860px) {
-  .sidebar-wrap { position: fixed; z-index: 30; top: 0; left: 0; height: 100%; transform: translateX(-100%); transition: transform 0.2s ease; }
-  .sidebar-wrap.sidebar-open { transform: translateX(0); }
+  .sidebar-wrap { 
+    position: fixed; 
+    z-index: 30; 
+    top: 0; 
+    left: 0; 
+    height: 100%; 
+    transform: translateX(-100%); 
+    transition: transform 0.2s ease; 
+  }
+  .sidebar-wrap.sidebar-open { 
+    transform: translateX(0); 
+  }
 }

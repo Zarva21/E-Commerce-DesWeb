@@ -16,10 +16,23 @@ const formatPrice = (value) =>
     minimumFractionDigits: 2,
   }).format(value);
 
-function CheckoutFormContent({ shippingData, onBack, onFinish }) {
-  const stripe = useStripe();
-  const elements = useElements();
-  const { items, subtotal, clearCart } = useCart();
+const EMPTY_FORM = { nombre: "", numero: "", vencimiento: "", cvv: "" };
+
+const PAYMENT_METHODS = [
+  { id: "contra-entrega", label: "Pago contra entrega", hint: "Pagás cuando recibís tu pedido" },
+  { id: "tarjeta", label: "Tarjeta de crédito/débito", hint: "Pagás ahora con tu tarjeta" },
+];
+
+function formatCardNumber(value) {
+  const digits = value.replace(/\D/g, "").slice(0, 16);
+  return digits.replace(/(.{4})/g, "$1 ").trim();
+}
+
+function formatExpiry(value) {
+  const digits = value.replace(/\D/g, "").slice(0, 4);
+  if (digits.length <= 2) return digits;
+  return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+}
 
   const [cardHolder, setCardHolder] = useState("");
   const [loading, setLoading] = useState(false);
@@ -178,6 +191,89 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
 
       <div className="checkout-layout">
         <form className="checkout-form" onSubmit={handleSubmit}>
+          <fieldset className="checkout-methods">
+            <legend>Método de pago</legend>
+            {PAYMENT_METHODS.map((m) => (
+              <label
+                key={m.id}
+                className={`checkout-method${paymentMethod === m.id ? " is-selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="metodoPago"
+                  value={m.id}
+                  checked={paymentMethod === m.id}
+                  onChange={() => handleMethodChange(m.id)}
+                />
+                <span className="checkout-method-text">
+                  <strong>{m.label}</strong>
+                  <small>{m.hint}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+
+          {paymentMethod === "tarjeta" && (
+            <>
+              <label className="checkout-field">
+                <span>Titular de la tarjeta</span>
+                <input
+                  name="nombre"
+                  value={form.nombre}
+                  onChange={handleChange}
+                  placeholder="Como aparece en la tarjeta"
+                  type="text"
+                  required
+                />
+              </label>
+
+              <label className="checkout-field">
+                <span>Número de tarjeta</span>
+                <input
+                  name="numero"
+                  value={form.numero}
+                  onChange={handleChange}
+                  placeholder="0000 0000 0000 0000"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={19}
+                  required
+                />
+              </label>
+
+              <div className="checkout-field-row">
+                <label className="checkout-field">
+                  <span>Vencimiento</span>
+                  <input
+                    name="vencimiento"
+                    value={form.vencimiento}
+                    onChange={handleChange}
+                    placeholder="MM/AA"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                    required
+                  />
+                </label>
+                <label className="checkout-field">
+                  <span>CVV</span>
+                  <input
+                    name="cvv"
+                    value={form.cvv}
+                    onChange={handleChange}
+                    placeholder="123"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={4}
+                    required
+                  />
+                </label>
+              </div>
+            </>
+          )}
+
+          <button type="submit" className="checkout-submit" disabled={!paymentMethod}>
+            <span>CONFIRMAR COMPRA</span>
           {errorMessage && (
             <div style={{ color: "#dc2626", backgroundColor: "#fee2e2", padding: "0.75rem 1rem", borderRadius: "6px", marginBottom: "1rem" }}>
               {errorMessage}

@@ -44,6 +44,18 @@
   color: var(--violet-700);
 }
 
+/* SECCIONES Y GRIDS */
+.dashboard-section {
+  margin-bottom: 24px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
 .dashboard-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -53,9 +65,9 @@
 
 .dashboard-card-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 
 .dashboard-card-head h3 {
@@ -64,6 +76,12 @@
   font-weight: 600;
   font-size: 20px;
   color: var(--violet-900);
+}
+
+.dashboard-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .dashboard-card-link {
@@ -79,6 +97,247 @@
   text-decoration: underline;
 }
 
+/* GRÁFICO BARRAS VENTAS MENSUALES */
+.monthly-sales-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  height: 200px;
+  padding-top: 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.monthly-sales-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+.monthly-sales-val {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--violet-900);
+  margin-bottom: 6px;
+}
+
+.bar-container {
+  flex: 1;
+  width: 100%;
+  max-width: 48px;
+  background: #f1f5f9;
+  border-radius: 6px 6px 0 0;
+  display: flex;
+  align-items: flex-end;
+  overflow: hidden;
+}
+
+.bar-fill {
+  width: 100%;
+  background: linear-gradient(180deg, var(--violet-600) 0%, var(--violet-900) 100%);
+  border-radius: 6px 6px 0 0;
+  transition: height 0.4s ease;
+}
+
+.monthly-sales-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 8px;
+}
+
+.monthly-sales-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* PRODUCTOS MÁS VENDIDOS */
+.dashboard-ranking-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dashboard-ranking-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.dashboard-ranking-list li:last-child {
+  border-bottom: none;
+}
+
+.ranking-badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #475569;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.ranking-badge.rank-1 {
+  background: #fef08a;
+  color: #854d0e;
+}
+
+.ranking-badge.rank-2 {
+  background: #e2e8f0;
+  color: #334155;
+}
+
+.ranking-badge.rank-3 {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.ranking-details {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.ranking-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.ranking-brand {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.ranking-revenue {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--violet-900);
+}
+
+/* ESTADO DE EXISTENCIAS (PILLS Y ALERTAS) */
+.stock-summary-pills {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.stock-pill {
+  padding: 10px;
+  border-radius: 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+}
+
+.pill-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.pill-warning {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+}
+
+.pill-danger {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.stock-pill-count {
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.stock-pill-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.stock-subtitle {
+  font-size: 12.5px;
+  margin: 12px 0 8px;
+  color: var(--ink);
+}
+
+.dashboard-stock-alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.dashboard-stock-alert-list li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.dashboard-stock-alert-list li:last-child {
+  border-bottom: none;
+}
+
+.stock-alert-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.stock-alert-sku {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.stock-alert-location {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.stock-alert-qty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.qty-out {
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+.qty-low {
+  color: #d97706;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+
+.stock-reorder-tag {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.dashboard-empty-msg {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 8px 0;
+}
+
+/* LISTA DE ÚLTIMOS PEDIDOS */
 .dashboard-order-list {
   list-style: none;
   margin: 0;
@@ -117,10 +376,21 @@
   color: var(--violet-900);
 }
 
+/* RESPONSIVE */
 @media (max-width: 900px) {
-  .dashboard-stats { grid-template-columns: repeat(2, 1fr); }
+  .dashboard-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 520px) {
-  .dashboard-stats { grid-template-columns: 1fr; }
+  .dashboard-stats {
+    grid-template-columns: 1fr;
+  }
+  .monthly-sales-chart {
+    overflow-x: auto;
+  }
 }
