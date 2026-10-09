@@ -55,3 +55,10 @@ exports.addAddress = async (customerId, addressData) => {
   await exports.getById(customerId); // valida que el cliente exista
   return Address.create({ customer_id: customerId, ...addressData });
 };
+
+exports.getByUserId = async (userId) => {
+  return await Customer.findOne({
+    where: { user_id: userId },
+    include: [db.user, Address]
+  });
+};

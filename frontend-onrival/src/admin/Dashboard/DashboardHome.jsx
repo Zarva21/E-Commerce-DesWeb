@@ -22,6 +22,7 @@ const MOCK_MONTHLY_SALES = [
 ];
 
 export default function DashboardHome({ onNavigate }) {
+  // Sincronización con modelos actualizados del backend/MOCKs:
   const pendingOrders = MOCK_ORDERS.filter((o) => o.status === "Pendiente").length;
   const activeOffers = MOCK_OFFERS.filter((o) => o.is_active ?? o.active).length;
   const activeEmployees = MOCK_EMPLOYEES.filter(
