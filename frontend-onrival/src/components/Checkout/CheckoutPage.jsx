@@ -12,6 +12,11 @@ const formatPrice = (value) =>
 
 const EMPTY_FORM = { nombre: "", numero: "", vencimiento: "", cvv: "" };
 
+const PAYMENT_METHODS = [
+  { id: "contra-entrega", label: "Pago contra entrega", hint: "Pagás cuando recibís tu pedido" },
+  { id: "tarjeta", label: "Tarjeta de crédito/débito", hint: "Pagás ahora con tu tarjeta" },
+];
+
 function formatCardNumber(value) {
   const digits = value.replace(/\D/g, "").slice(0, 16);
   return digits.replace(/(.{4})/g, "$1 ").trim();
@@ -30,6 +35,7 @@ function formatCVV(value) {
 export default function CheckoutPage({ shippingData, onBack, onFinish }) {
   const { items, subtotal, clearCart } = useCart();
   const [form, setForm] = useState(EMPTY_FORM);
+  const [paymentMethod, setPaymentMethod] = useState(null);
   const [submitted, setSubmitted] = useState(false);
 
   const handleChange = (e) => {
@@ -41,10 +47,22 @@ export default function CheckoutPage({ shippingData, onBack, onFinish }) {
     setForm((f) => ({ ...f, [name]: formatted }));
   };
 
+  const handleMethodChange = (id) => {
+    setPaymentMethod(id);
+    if (id !== "tarjeta") setForm(EMPTY_FORM); // no dejamos datos de tarjeta guardados en el estado
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (!paymentMethod) return;
     // TODO: acá va la integración real con la pasarela de pago / API de pedidos
-    console.log("pago", form, items, shippingData);
+    const payload = {
+      metodoPago: paymentMethod,
+      ...(paymentMethod === "tarjeta" && { tarjeta: form }),
+      items,
+      shippingData,
+    };
+    console.log("pedido", payload);
     clearCart();
     setSubmitted(true);
   };
@@ -77,63 +95,89 @@ export default function CheckoutPage({ shippingData, onBack, onFinish }) {
 
       <div className="checkout-layout">
         <form className="checkout-form" onSubmit={handleSubmit}>
-          <label className="checkout-field">
-            <span>Titular de la tarjeta</span>
-            <input
-              name="nombre"
-              value={form.nombre}
-              onChange={handleChange}
-              placeholder="Como aparece en la tarjeta"
-              type="text"
-              required
-            />
-          </label>
+          <fieldset className="checkout-methods">
+            <legend>Método de pago</legend>
+            {PAYMENT_METHODS.map((m) => (
+              <label
+                key={m.id}
+                className={`checkout-method${paymentMethod === m.id ? " is-selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="metodoPago"
+                  value={m.id}
+                  checked={paymentMethod === m.id}
+                  onChange={() => handleMethodChange(m.id)}
+                />
+                <span className="checkout-method-text">
+                  <strong>{m.label}</strong>
+                  <small>{m.hint}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
 
-          <label className="checkout-field">
-            <span>Número de tarjeta</span>
-            <input
-              name="numero"
-              value={form.numero}
-              onChange={handleChange}
-              placeholder="0000 0000 0000 0000"
-              type="text"
-              inputMode="numeric"
-              maxLength={19}
-              required
-            />
-          </label>
+          {paymentMethod === "tarjeta" && (
+            <>
+              <label className="checkout-field">
+                <span>Titular de la tarjeta</span>
+                <input
+                  name="nombre"
+                  value={form.nombre}
+                  onChange={handleChange}
+                  placeholder="Como aparece en la tarjeta"
+                  type="text"
+                  required
+                />
+              </label>
 
-          <div className="checkout-field-row">
-            <label className="checkout-field">
-              <span>Vencimiento</span>
-              <input
-                name="vencimiento"
-                value={form.vencimiento}
-                onChange={handleChange}
-                placeholder="MM/AA"
-                type="text"
-                inputMode="numeric"
-                maxLength={5}
-                required
-              />
-            </label>
-            <label className="checkout-field">
-              <span>CVV</span>
-              <input
-                name="cvv"
-                value={form.cvv}
-                onChange={handleChange}
-                placeholder="123"
-                type="text"
-                inputMode="numeric"
-                maxLength={4}
-                required
-              />
-            </label>
-          </div>
+              <label className="checkout-field">
+                <span>Número de tarjeta</span>
+                <input
+                  name="numero"
+                  value={form.numero}
+                  onChange={handleChange}
+                  placeholder="0000 0000 0000 0000"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={19}
+                  required
+                />
+              </label>
 
-          <button type="submit" className="checkout-submit">
-            <span>CONFIRMAR PAGO</span>
+              <div className="checkout-field-row">
+                <label className="checkout-field">
+                  <span>Vencimiento</span>
+                  <input
+                    name="vencimiento"
+                    value={form.vencimiento}
+                    onChange={handleChange}
+                    placeholder="MM/AA"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={5}
+                    required
+                  />
+                </label>
+                <label className="checkout-field">
+                  <span>CVV</span>
+                  <input
+                    name="cvv"
+                    value={form.cvv}
+                    onChange={handleChange}
+                    placeholder="123"
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={4}
+                    required
+                  />
+                </label>
+              </div>
+            </>
+          )}
+
+          <button type="submit" className="checkout-submit" disabled={!paymentMethod}>
+            <span>CONFIRMAR COMPRA</span>
           </button>
         </form>
 

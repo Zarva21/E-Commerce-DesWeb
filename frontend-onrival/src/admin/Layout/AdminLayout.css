@@ -1,6 +1,7 @@
 .admin-layout {
   display: flex;
-  min-height: 100vh;
+  height: 100vh; /* Se fija exactamente al alto de la ventana */
+  overflow: hidden; /* Evita que la página completa haga scroll */
 }
 
 .admin-main {
@@ -8,11 +9,13 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  height: 100vh; /* Mantiene la columna al alto del puerto de visión */
 }
 
 .admin-content {
   flex: 1;
   padding: 28px 32px 60px;
+  overflow-y: auto; /* AQUÍ SE ACTIVA EL SCROLL: solo esta zona se desplaza */
 }
 
 .sidebar-backdrop {

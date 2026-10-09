@@ -101,6 +101,7 @@ export default function App() {
       
       {view === "shipping" && (
         <ShippingPage
+          isLoggedIn={isLoggedIn}
           onBackToCart={() => setView("cart")}
           onContinue={(data) => {
             setShippingData(data);

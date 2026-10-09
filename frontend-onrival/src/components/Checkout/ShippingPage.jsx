@@ -10,9 +10,17 @@ const formatPrice = (value) =>
     minimumFractionDigits: 2,
   }).format(value);
 
-const EMPTY_FORM = { nombre: "", telefono: "", direccion: "", direccion2: "", ciudad: "", departamento: "" };
+const EMPTY_FORM = {
+  email: "",
+  nombre: "",
+  telefono: "",
+  direccion: "",
+  direccion2: "",
+  ciudad: "",
+  departamento: "",
+};
 
-export default function ShippingPage({ onBackToCart, onContinue }) {
+export default function ShippingPage({ isLoggedIn = false, onBackToCart, onContinue }) {
   const { items, subtotal } = useCart();
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -20,7 +28,9 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onContinue(form);
+    // Si está registrado no hay correo de invitado, así que no lo mandamos
+    const { email, ...rest } = form;
+    onContinue(isLoggedIn ? rest : form);
   };
 
   const total = subtotal + SHIPPING_COST;
@@ -38,6 +48,20 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
 
       <div className="shipping-layout">
         <form className="shipping-form" onSubmit={handleSubmit}>
+          {!isLoggedIn && (
+            <label className="shipping-field">
+              <span>Contacto</span>
+              <input
+                name="email"
+                value={form.email}
+                onChange={handleChange}
+                placeholder="Correo electrónico"
+                type="email"
+                required
+              />
+            </label>
+          )}
+
           <label className="shipping-field">
             <span>Nombre completo</span>
             <input name="nombre" value={form.nombre} onChange={handleChange} placeholder="Nombre y apellido" type="text" required />
