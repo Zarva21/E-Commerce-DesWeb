@@ -26,3 +26,12 @@ exports.updateStatus = async (req, res) => {
     res.status(err.status || 500).send({ message: err.message });
   }
 };
+
+exports.getMyOrders = async (req, res) => {
+  try {
+    const orders = await orderService.getOrdersByUserId(req.userId);
+    res.status(200).send(orders);
+  } catch (err) {
+    res.status(err.status || 500).send({ message: err.message });
+  }
+};

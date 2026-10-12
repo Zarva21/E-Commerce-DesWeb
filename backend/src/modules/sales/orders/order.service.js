@@ -3,6 +3,9 @@ const inventoryService = require("../../inventory/inventory.service.js");
 
 const Order = db.order;
 const OrderItem = db.orderItem;
+const ProductVariant = db.productVariant;
+const Product = db.product;
+const Customer = db.customer;
 
 exports.getAll = (filters = {}) => {
   const where = {};
@@ -67,3 +70,48 @@ exports.updateStatus = async (id, newStatus, employeeId = null) => {
   await order.save();
   return order;
 };
+
+exports.getOrdersByUserId = async (userId) => {
+  const customer = await Customer.findOne({ where: { user_id: userId } });
+  if (!customer) {
+    const error = new Error("Cliente no encontrado.");
+    error.status = 404;
+    throw error;
+  }
+
+  const orders = await Order.findAll({
+    where: { customer_id: customer.id },
+    include: [
+      {
+        model: OrderItem,
+        include: [
+          {
+            model: ProductVariant,
+            attributes: ["id", "sku", "size", "color"], // 👈 corregido: 'attributes' con doble 't'
+            include: [{ model: Product, attributes: ["id", "name"] }],
+          },
+        ],
+      },
+    ],
+    order: [["created_at", "DESC"]],
+  });
+
+  return orders.map((ord) => ({
+    id: ord.order_number,
+    db_id: ord.id,
+    fecha: ord.created_at,
+    estado: ord.status,
+    subtotal: ord.subtotal,
+    envio: ord.shipping_cost,
+    descuento: ord.discount,
+    total: ord.total,
+    items: (ord.order_items || ord.orderItems || []).map((item) => ({
+      name: item.product_variant?.product?.name || "Producto",
+      size: item.product_variant?.size || "Única",
+      color: item.product_variant?.color || null,
+      quantity: item.quantity,
+      price: Number(item.unit_price),
+    })),
+  }));
+};
+
