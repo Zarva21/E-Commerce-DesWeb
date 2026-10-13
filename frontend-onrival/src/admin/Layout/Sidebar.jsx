@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { id: "usuarios", label: "Usuarios" },
   { id: "pedidos", label: "Pedidos" },
   { id: "ofertas", label: "Ofertas" },
+  { id: "destacados", label: "Destacados" },
 ];
 
 export default function Sidebar({ activeView, onSelectView, onExitAdmin }) {

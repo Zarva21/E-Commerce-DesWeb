@@ -7,6 +7,7 @@ const TITLES = {
   usuarios: "Usuarios",
   pedidos: "Pedidos",
   ofertas: "Ofertas",
+  destacados: "Destacados",
 };
 
 export default function Topbar({ activeView, onToggleSidebar, adminName = "Admin" }) {

@@ -1,14 +1,32 @@
 import { useState } from "react";
-import { HERO_SLIDES } from "./heroSlides";
+import { useHeroSlides } from "../../context/HeroSlidesContext";
 import "./HeroCarousel.css";
 
-export default function HeroCarousel({ onSelectProduct }) {
-  const [index, setIndex] = useState(0);
-  const total = HERO_SLIDES.length;
-  const slide = HERO_SLIDES[index];
+const ChevronLeft = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="15 5 8 12 15 19" />
+  </svg>
+);
 
-  const goPrev = () => setIndex((i) => (i - 1 + total) % total);
-  const goNext = () => setIndex((i) => (i + 1) % total);
+const ChevronRight = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <polyline points="9 5 16 12 9 19" />
+  </svg>
+);
+
+export default function HeroCarousel({ onAction }) {
+  const { slides: allSlides } = useHeroSlides();
+  const slides = allSlides.filter((s) => s.active);
+  const [index, setIndex] = useState(0);
+  const total = slides.length;
+
+  if (total === 0) return null;
+
+  const current = index >= total ? 0 : index; // por si se ocultó/eliminó el último slide
+  const slide = slides[current];
+
+  const goPrev = () => setIndex((current - 1 + total) % total);
+  const goNext = () => setIndex((current + 1) % total);
 
   return (
     <section className="hero-carousel">
@@ -19,45 +37,45 @@ export default function HeroCarousel({ onSelectProduct }) {
         <div className="hero-content">
           <p className="hero-eyebrow">{slide.eyebrow}</p>
           <h1 className="hero-title">{slide.title}</h1>
-          {slide.ctaLabel && (
-            <button
-              type="button"
-              className="hero-cta"
-              onClick={() => slide.productId && onSelectProduct?.(slide.productId)}
-            >
+          {slide.ctaLabel && slide.link?.type !== "none" && (
+            <button type="button" className="hero-cta" onClick={() => onAction?.(slide.link)}>
               {slide.ctaLabel}
             </button>
           )}
         </div>
 
-        <button
-          type="button"
-          className="hero-arrow hero-arrow-left"
-          onClick={goPrev}
-          aria-label="Anuncio anterior"
-        >
-          ‹
-        </button>
-        <button
-          type="button"
-          className="hero-arrow hero-arrow-right"
-          onClick={goNext}
-          aria-label="Siguiente anuncio"
-        >
-          ›
-        </button>
-
-        <div className="hero-dots">
-          {HERO_SLIDES.map((s, i) => (
+        {total > 1 && (
+          <>
             <button
-              key={s.id}
               type="button"
-              className={`hero-dot ${i === index ? "hero-dot-active" : ""}`}
-              onClick={() => setIndex(i)}
-              aria-label={`Ir al anuncio ${i + 1}`}
-            />
-          ))}
-        </div>
+              className="hero-arrow hero-arrow-left"
+              onClick={goPrev}
+              aria-label="Anuncio anterior"
+            >
+              <ChevronLeft />
+            </button>
+            <button
+              type="button"
+              className="hero-arrow hero-arrow-right"
+              onClick={goNext}
+              aria-label="Siguiente anuncio"
+            >
+              <ChevronRight />
+            </button>
+
+            <div className="hero-dots">
+              {slides.map((s, i) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className={`hero-dot ${i === current ? "hero-dot-active" : ""}`}
+                  onClick={() => setIndex(i)}
+                  aria-label={`Ir al anuncio ${i + 1}`}
+                />
+              ))}
+            </div>
+          </>
+        )}
       </div>
     </section>
   );

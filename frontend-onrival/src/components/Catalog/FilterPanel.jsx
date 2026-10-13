@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import PriceRangeSlider from "./PriceRangeSlider";
-import { CATEGORY_OPTIONS, BRAND_OPTIONS, SPORT_OPTIONS, PRICE_RANGE, DEFAULT_FILTERS } from "./filterOptions";
+import { PRICE_RANGE, DEFAULT_FILTERS } from "./filterOptions";
 import "./FilterPanel.css";
 
 function ChipGroup({ title, options, selected, onSelect }) {
@@ -23,7 +23,7 @@ function ChipGroup({ title, options, selected, onSelect }) {
   );
 }
 
-export default function FilterPanel({ open, value, onClose, onApply }) {
+export default function FilterPanel({ open, value, categoryOptions = [], brandOptions = [], onClose, onApply }) {
   const [draft, setDraft] = useState(value ?? DEFAULT_FILTERS);
 
   // cada vez que se abre el panel, arranca desde los filtros que ya están aplicados
@@ -48,19 +48,23 @@ export default function FilterPanel({ open, value, onClose, onApply }) {
         </div>
 
         <div className="filter-panel-body">
-          <ChipGroup
-            title="Categoría"
-            options={CATEGORY_OPTIONS}
-            selected={draft.categoria}
-            onSelect={(v) => setDraft((d) => ({ ...d, categoria: v }))}
-          />
+          {categoryOptions.length > 0 && (
+            <ChipGroup
+              title="Categoría"
+              options={categoryOptions}
+              selected={draft.categoria}
+              onSelect={(v) => setDraft((d) => ({ ...d, categoria: v }))}
+            />
+          )}
 
-          <ChipGroup
-            title="Marca"
-            options={BRAND_OPTIONS}
-            selected={draft.marca}
-            onSelect={(v) => setDraft((d) => ({ ...d, marca: v }))}
-          />
+          {brandOptions.length > 0 && (
+            <ChipGroup
+              title="Marca"
+              options={brandOptions}
+              selected={draft.marca}
+              onSelect={(v) => setDraft((d) => ({ ...d, marca: v }))}
+            />
+          )}
 
           <div className="filter-group">
             <p className="filter-group-title">Precio</p>
@@ -72,13 +76,6 @@ export default function FilterPanel({ open, value, onClose, onApply }) {
               onChange={(priceMin, priceMax) => setDraft((d) => ({ ...d, priceMin, priceMax }))}
             />
           </div>
-
-          <ChipGroup
-            title="Deporte"
-            options={SPORT_OPTIONS}
-            selected={draft.deporte}
-            onSelect={(v) => setDraft((d) => ({ ...d, deporte: v }))}
-          />
 
           <div className="filter-group">
             <p className="filter-group-title">Oferta</p>

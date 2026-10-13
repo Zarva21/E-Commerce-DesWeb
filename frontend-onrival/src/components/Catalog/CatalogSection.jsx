@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import FilterPanel from "./FilterPanel";
 import ProductCard from "./ProductCard";
 import { MOCK_PRODUCTS } from "./mockProducts";
 import { DEFAULT_FILTERS } from "./filterOptions";
+import { getCategoryOptions } from "./CategoryOptions";
 import { normalize } from "../../utils/normalize";
 import "./CatalogSection.css";
 
@@ -20,20 +21,47 @@ function applyFilters(products, filters) {
   return products.filter((product) => {
     if (filters.categoria && normalize(product.category) !== normalize(filters.categoria)) return false;
     if (filters.marca && normalize(product.brand) !== normalize(filters.marca)) return false;
-    if (filters.deporte && normalize(product.sport) !== normalize(filters.deporte)) return false;
     if (filters.oferta && !product.onSale) return false;
     if (product.price < filters.priceMin || product.price > filters.priceMax) return false;
     return true;
   });
 }
 
-export default function CatalogSection({ section, onSelectSection, onSelectProduct }) {
-  const [filters, setFilters] = useState(DEFAULT_FILTERS);
+// Convierte el filtro que viene de un destacado del carrusel en filtros del catálogo
+function filtersFromHero(filter) {
+  if (!filter) return DEFAULT_FILTERS;
+  if (filter.kind === "offers") return { ...DEFAULT_FILTERS, oferta: true };
+  if (filter.kind === "category") return { ...DEFAULT_FILTERS, categoria: filter.category };
+  return DEFAULT_FILTERS;
+}
+
+// Valores únicos y ordenados de un campo de los productos (mientras no haya backend)
+const uniqueSorted = (products, field) =>
+  [...new Set(products.map((p) => p[field]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+
+export default function CatalogSection({ section, filter = null, onSelectSection, onSelectProduct }) {
+  const [filters, setFilters] = useState(() => filtersFromHero(filter));
   const [panelOpen, setPanelOpen] = useState(false);
   const isGeneralCatalog = section === "catalogo";
 
+  // Si cambia el filtro del destacado (o se quita al navegar), se actualizan los filtros
+  useEffect(() => {
+    setFilters(filtersFromHero(filter));
+  }, [filter]);
+
   const baseProducts = isGeneralCatalog ? getAllProducts() : MOCK_PRODUCTS[section] ?? [];
   const products = applyFilters(baseProducts, filters);
+
+  // TODO: reemplazar por la respuesta del backend:
+  //   categoryTree  -> categoryService.getTree()  (GET de categorías en árbol)
+  //   brands        -> brandService.getAll()      (lista de { id, name, logo_url, ... })
+  // Mientras tanto, las opciones salen de los productos de esta sección.
+  const categoryTree = null;
+  const brands = null;
+
+  const categoryOptions =
+    getCategoryOptions(categoryTree, section) ?? uniqueSorted(baseProducts, "category");
+  const brandOptions = brands ? brands.map((b) => b.name) : uniqueSorted(baseProducts, "brand");
 
   return (
     <section id="catalogo" className="catalog">
@@ -72,6 +100,8 @@ export default function CatalogSection({ section, onSelectSection, onSelectProdu
       <FilterPanel
         open={panelOpen}
         value={filters}
+        categoryOptions={categoryOptions}
+        brandOptions={brandOptions}
         onClose={() => setPanelOpen(false)}
         onApply={setFilters}
       />
