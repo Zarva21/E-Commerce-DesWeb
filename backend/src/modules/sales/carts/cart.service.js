@@ -4,6 +4,11 @@ const catalogService = require("../../catalog/catalog.service.js");
 const Cart = db.cart;
 const CartItem = db.cartItem;
 
+// Crea un carrito anónimo independiente (customer_id = null)
+exports.createGuestCart = async () => {
+  return await Cart.create({ customer_id: null, status: "active" });
+};
+
 exports.getOrCreateActiveCart = async (customerId) => {
   let cart = await Cart.findOne({ where: { customer_id: customerId, status: "active" } });
   if (!cart) {
@@ -11,6 +16,15 @@ exports.getOrCreateActiveCart = async (customerId) => {
   }
   return cart;
 };
+
+// Asocia un carrito huérfano al customer resuelto durante el checkout
+exports.attachCustomerToCart = async (cartId, customerId, transaction) => {
+  await Cart.update(
+    { customer_id: customerId },
+    { where: { id: cartId }, transaction }
+  );
+};
+
 
 /**
  * Resuelve el carrito con precios EN VIVO desde Catalog (nunca se guarda el
@@ -104,4 +118,15 @@ exports.removeItem = async (cartItemId) => {
 exports.clearCart = async (cartId, transaction) => {
   await CartItem.destroy({ where: { cart_id: cartId }, transaction });
   await Cart.update({ status: "converted" }, { where: { id: cartId }, transaction });
+};
+
+exports.convertAndAssignCart = async (cartId, customerId, transaction) => {
+  await CartItem.destroy({ where: { cart_id: cartId }, transaction });
+  await Cart.update(
+    {
+      customer_id: customerId,
+      status: "converted",
+    },
+    { where: { id: cartId }, transaction }
+  );
 };

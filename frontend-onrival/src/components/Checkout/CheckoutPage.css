@@ -11,17 +11,30 @@
 .checkout-field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: var(--ink); }
 .checkout-field input { font-family: var(--font-body); font-size: 14px; font-weight: 500; padding: 11px 12px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); color: var(--ink); outline: none; transition: border-color 0.15s ease; }
 .checkout-field input:focus { border-color: var(--violet-600); }
-.checkout-methods { border: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
-.checkout-methods legend { padding: 0 0 8px; font-size: 13px; font-weight: 700; color: var(--ink); }
-.checkout-method { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--surface); cursor: pointer; transition: border-color 0.15s ease; }
-.checkout-method:hover { border-color: var(--violet-600); }
-.checkout-method.is-selected { border-color: var(--violet-600); }
-.checkout-method input { accent-color: var(--violet-700); width: 16px; height: 16px; margin: 0; cursor: pointer; }
-.checkout-method-text { display: flex; flex-direction: column; gap: 2px; }
-.checkout-method-text strong { font-size: 14px; font-weight: 700; color: var(--ink); }
-.checkout-method-text small { font-size: 12px; font-weight: 500; color: var(--muted); }
-.checkout-submit:disabled { opacity: 0.5; cursor: not-allowed; }
-.checkout-submit:disabled:hover { background: var(--violet-700); }
+
+/* --- Stripe Integration --- */
+.stripe-input-wrapper {
+  padding: 11px 12px;
+  border-radius: 8px;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.stripe-input-wrapper .StripeElement {
+  width: 100%;
+}
+.stripe-input-wrapper.StripeElement--focus {
+  border-color: var(--violet-600);
+}
+.stripe-input-wrapper.StripeElement--invalid {
+  border-color: #ef4444;
+}
+
 .checkout-submit { margin-top: 8px; border: none; background: var(--violet-700); color: #fff; font-family: var(--font-body); font-weight: 800; font-size: 14px; letter-spacing: 0.3px; padding: 14px 0; cursor: pointer; transform: skewX(-10deg); transition: background 0.15s ease; }
 .checkout-submit span { display: inline-block; transform: skewX(10deg); }
 .checkout-submit:hover { background: var(--violet-600); }

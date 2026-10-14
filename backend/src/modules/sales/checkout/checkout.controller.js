@@ -18,21 +18,31 @@ exports.createIntent = async (req, res) => {
 // POST /sales/checkout/confirm
 exports.confirm = async (req, res) => {
   try {
-    const { cart_id, payment_method, stripe_payment_intent_id, coupon_code, address_id, guest_data } = req.body;
+    const {
+      cart_id,
+      payment_method,
+      stripe_payment_intent_id,
+      payment_method_id,
+      coupon_code,
+      address_id,
+      guest_data,
+    } = req.body;
 
     const result = await checkoutService.confirmCheckout({
       cartId: cart_id,
       paymentMethod: payment_method,
       stripePaymentIntentId: stripe_payment_intent_id,
+      paymentMethodId: payment_method_id,
       couponCode: coupon_code,
       addressId: address_id,
       guestData: guest_data,
       userId: req.userId || null,
-      employeeId: null // si un empleado procesa la venta en tienda, se agrega vía verifyToken más adelante
+      employeeId: null,
     });
 
     res.status(201).send(result);
   } catch (err) {
+    console.error("Error en checkout confirm:", err);
     res.status(err.status || 500).send({ message: err.message });
   }
 };

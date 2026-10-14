@@ -9,6 +9,15 @@ exports.getOrCreateForCustomer = async (req, res) => {
   }
 };
 
+exports.createGuestCart = async (req, res) => {
+  try {
+    const cart = await cartService.createGuestCart();
+    res.status(201).send(await cartService.getCartWithTotals(cart.id));
+  } catch (err) {
+    res.status(err.status || 500).send({ message: err.message });
+  }
+};
+
 exports.getById = async (req, res) => {
   try {
     res.status(200).send(await cartService.getCartWithTotals(req.params.cartId));

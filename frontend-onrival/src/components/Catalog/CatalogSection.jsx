@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import FilterPanel from "./FilterPanel";
 import ProductCard from "./ProductCard";
-import { MOCK_PRODUCTS } from "./mockProducts";
+import { catalogService } from "../../services/catalogService";
 import { DEFAULT_FILTERS } from "./filterOptions";
 import { getCategoryOptions } from "./CategoryOptions";
 import { normalize } from "../../utils/normalize";
@@ -12,10 +12,6 @@ const SECTION_LINKS = [
   { id: "mujer", label: "Mujer" },
   { id: "accesorios", label: "Accesorios" },
 ];
-
-function getAllProducts() {
-  return Object.entries(MOCK_PRODUCTS).filter(([key]) => key !== "catalogo").flatMap(([, list]) => list);
-}
 
 function applyFilters(products, filters) {
   return products.filter((product) => {
@@ -34,34 +30,64 @@ function filtersFromHero(filter) {
   if (filter.kind === "category") return { ...DEFAULT_FILTERS, categoria: filter.category };
   return DEFAULT_FILTERS;
 }
-
-// Valores únicos y ordenados de un campo de los productos (mientras no haya backend)
+// Valores únicos y ordenados de un campo de los productos
 const uniqueSorted = (products, field) =>
   [...new Set(products.map((p) => p[field]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
 
 export default function CatalogSection({ section, filter = null, onSelectSection, onSelectProduct }) {
+  const [allProducts, setAllProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState(() => filtersFromHero(filter));
   const [panelOpen, setPanelOpen] = useState(false);
   const isGeneralCatalog = section === "catalogo";
 
-  // Si cambia el filtro del destacado (o se quita al navegar), se actualizan los filtros
+  useEffect(() => {
+    setLoading(true);
+    catalogService
+      .getAll()
+      .then((data) => setAllProducts(data))
+      .catch((err) => console.error("Error al obtener catálogo:", err))
+      .finally(() => setLoading(false));
+  }, []);
+
+   // Si cambia el filtro del destacado (o se quita al navegar), se actualizan los filtros
   useEffect(() => {
     setFilters(filtersFromHero(filter));
   }, [filter]);
 
-  const baseProducts = isGeneralCatalog ? getAllProducts() : MOCK_PRODUCTS[section] ?? [];
+  // Filtrar base según la sección activa ("hombre", "mujer", "accesorios" o todo)
+  const baseProducts = isGeneralCatalog
+    ? allProducts
+    : allProducts.filter((p) => {
+        const secNorm = normalize(section || "");
+        return (
+          normalize(p.gender || "").includes(secNorm) ||
+          normalize(p.category || "").includes(secNorm)
+        );
+      });
+
   const products = applyFilters(baseProducts, filters);
 
-  // TODO: reemplazar por la respuesta del backend:
-  //   categoryTree  -> categoryService.getTree()  (GET de categorías en árbol)
-  //   brands        -> brandService.getAll()      (lista de { id, name, logo_url, ... })
-  // Mientras tanto, las opciones salen de los productos de esta sección.
-  const categoryTree = null;
-  const brands = null;
+  const categoryOptions = uniqueSorted(baseProducts, "category");
+  const brandOptions = uniqueSorted(baseProducts, "brand");
+  
+  
+  if (loading) {
+    return (
+      <section id="catalogo" className="catalog">
+        <div style={{ padding: "3rem", width: "100%", textAlign: "center" }}>
+          <p>Cargando artículos deportivos...</p>
+        </div>
+      </section>
+    );
+  }
 
-  const categoryOptions =
-    getCategoryOptions(categoryTree, section) ?? uniqueSorted(baseProducts, "category");
-  const brandOptions = brands ? brands.map((b) => b.name) : uniqueSorted(baseProducts, "brand");
+  // Dentro de CatalogSection.jsx:
+console.log("1. Productos directos de la BD:", allProducts);
+console.log("2. BaseProducts tras filtro de sección:", baseProducts);
+console.log("3. Filtros activos actualmente:", filters);
+console.log("4. Productos que pasaron todos los filtros:", products);
+
 
   return (
     <section id="catalogo" className="catalog">

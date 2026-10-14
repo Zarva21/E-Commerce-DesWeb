@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useCart } from "./context/CartContext";
+
+import { authService } from "./services/authService";
+
 import Header from "./components/Header/Header";
 import HeroCarousel from "./components/Hero/HeroCarousel";
 import CatalogTeaser from "./components/Home/CatalogTeaser";
@@ -14,19 +17,21 @@ import CheckoutPage from "./components/Checkout/CheckoutPage";
 import AdminApp from "./admin/AdminApp";
 import "./styles/tokens.css";
 
+
 export default function App() {
   const { count } = useCart();
 
-  // "home" | "catalog" | "product" | "cart" | "profile" | "shipping" | "checkout" | "admin"
-  const [view, setView] = useState("home");
+  // "home" | "catalog" | "product" | "cart" | "shipping" | "checkout" | "admin"
+  const [view, setView] = useState(() => (authService.getUserRole() === "admin" ? "admin" : "home"));
+  
   const [activeSection, setActiveSection] = useState(null);
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [shippingData, setShippingData] = useState(null);
 
   // Filtro que viene de un destacado: { kind: "offers" } | { kind: "category", categoryId } | null
   const [catalogFilter, setCatalogFilter] = useState(null);
-
-  const [userRole, setUserRole] = useState(null);
+  // "admin" | "cliente" | null
+  const [userRole, setUserRole] = useState(() => authService.getUserRole());
   const isLoggedIn = userRole !== null;
 
   const [loginOpen, setLoginOpen] = useState(false);
@@ -66,9 +71,11 @@ export default function App() {
     setUserRole(role);
     setLoginOpen(false);
     if (role === "admin") setView("admin");
+    else setView("home");
   };
 
   const handleLogout = () => {
+    authService.logout(); // Limpia accessToken y user de localStorage
     setUserRole(null);
     setView("home");
   };

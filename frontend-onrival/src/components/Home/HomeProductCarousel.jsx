@@ -1,22 +1,35 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import ProductCard from "../Catalog/ProductCard";
-import { MOCK_PRODUCTS } from "../Catalog/mockProducts";
+import { catalogService } from "../../services/catalogService";
 import "./HomeProductCarousel.css";
 
 const ITEMS_PER_PAGE = 4;
 const MAX_PRODUCTS = 8;
 
-function getFeaturedProducts() {
-  return Object.entries(MOCK_PRODUCTS)
-    .filter(([key]) => key !== "catalogo")
-    .flatMap(([, list]) => list)
-    .slice(0, MAX_PRODUCTS);
-}
-
 export default function HomeProductCarousel({ onSelectProduct, onViewCatalog }) {
-  const products = getFeaturedProducts();
-  const totalPages = Math.max(1, Math.ceil(products.length / ITEMS_PER_PAGE));
+  const [products, setProducts] = useState([]);
   const [page, setPage] = useState(0);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    catalogService
+      .getAll()
+      .then((data) => setProducts(data.slice(0, MAX_PRODUCTS)))
+      .catch((err) => console.error("Error al cargar carrusel de inicio:", err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const totalPages = Math.max(1, Math.ceil(products.length / ITEMS_PER_PAGE));
+
+  if (loading) {
+    return (
+      <section className="home-carousel">
+        <p style={{ textAlign: "center", padding: "2rem", color: "#666" }}>
+          Cargando destacados...
+        </p>
+      </section>
+    );
+  }
 
   if (products.length === 0) return null;
 

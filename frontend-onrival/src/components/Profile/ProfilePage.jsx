@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import api from "../../config/api";
 import "./ProfilePage.css";
 
 // Formateador de moneda local GTQ
@@ -9,37 +10,54 @@ const formatPrice = (value) =>
     minimumFractionDigits: 2,
   }).format(value);
 
-// TODO: reemplazar por los datos reales retornados por la API/backend
-const MOCK_USER_PROFILE = {
-  nombre: "Carlos",
-  apellido: "Mendoza",
-  telefono: "5555-1234",
-  email: "carlos.mendoza@ejemplo.com",
-  pedidos: [
-    {
-      id: "ORD-2026-001",
-      fecha: "01/10/2026",
-      estado: "Entregado",
-      total: 1250,
-      items: [
-        { name: "Adidas Trionda Final Pro", size: "N/A", quantity: 1, price: 1250 },
-      ],
-    },
-    {
-      id: "ORD-2026-002",
-      fecha: "15/09/2026",
-      estado: "En camino",
-      total: 850,
-      items: [
-        { name: "Camiseta Real Madrid 2026/2027", size: "M", quantity: 1, price: 850 },
-      ],
-    },
-  ],
+const formatDate = (dateStr) => {
+  if (!dateStr) return "—";
+  try {
+    return new Date(dateStr).toLocaleDateString("es-GT", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return dateStr;
+  }
 };
 
-export default function ProfilePage({ user = MOCK_USER_PROFILE, onBackToHome }) {
-  // Pestaña activa: "account" | "orders"
-  const [activeTab, setActiveTab] = useState("account");
+export default function ProfilePage({ onBackToHome }) {
+  const [activeTab, setActiveTab] = useState("account"); // 👈 Estado de pestaña
+  const [profile, setProfile] = useState({
+    nombre: "",
+    apellido: "",
+    telefono: "",
+    email: "",
+  });
+  const [pedidos, setPedidos] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const storedUser = JSON.parse(localStorage.getItem("user") || "{}");
+
+    setProfile({
+      nombre: storedUser.firstName || "",
+      apellido: storedUser.lastName || "",
+      telefono: storedUser.phone || "",
+      email: storedUser.email || "",
+    });
+
+    // Petición al endpoint real de órdenes del usuario en sesión
+    api
+      .get("/sales/orders/me")
+      .then((res) => {
+        setPedidos(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch((err) => {
+        console.error("Error al cargar pedidos:", err);
+        setPedidos([]);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
+  }, []);
 
   return (
     <section className="profile-page">
@@ -53,7 +71,7 @@ export default function ProfilePage({ user = MOCK_USER_PROFILE, onBackToHome }) 
         <h1>MI PERFIL</h1>
       </div>
 
-      {/* Contenedor principal con sidebar a la izquierda y contenido a la derecha */}
+      {/* Contenedor principal */}
       <div className="profile-layout">
         {/* Navigation Sidebar */}
         <aside className="profile-sidebar">
@@ -86,22 +104,22 @@ export default function ProfilePage({ user = MOCK_USER_PROFILE, onBackToHome }) 
               <div className="profile-grid">
                 <div className="profile-card-item">
                   <span className="profile-label">Nombre</span>
-                  <p className="profile-value">{user.nombre || "—"}</p>
+                  <p className="profile-value">{profile.nombre || "—"}</p>
                 </div>
 
                 <div className="profile-card-item">
                   <span className="profile-label">Apellido</span>
-                  <p className="profile-value">{user.apellido || "—"}</p>
+                  <p className="profile-value">{profile.apellido || "—"}</p>
                 </div>
 
                 <div className="profile-card-item">
                   <span className="profile-label">Teléfono</span>
-                  <p className="profile-value">{user.telefono || "—"}</p>
+                  <p className="profile-value">{profile.telefono || "—"}</p>
                 </div>
 
                 <div className="profile-card-item">
                   <span className="profile-label">Correo electrónico</span>
-                  <p className="profile-value">{user.email || "—"}</p>
+                  <p className="profile-value">{profile.email || "—"}</p>
                 </div>
               </div>
             </div>
@@ -115,17 +133,23 @@ export default function ProfilePage({ user = MOCK_USER_PROFILE, onBackToHome }) 
                 <p>Revisa el estado de tus compras y sus detalles.</p>
               </div>
 
-              {user.pedidos && user.pedidos.length > 0 ? (
+              {loading ? (
+                <div className="orders-empty">
+                  <p>Cargando pedidos...</p>
+                </div>
+              ) : pedidos && pedidos.length > 0 ? (
                 <div className="orders-container">
-                  {user.pedidos.map((order) => (
-                    <article key={order.id} className="order-card">
+                  {pedidos.map((order) => (
+                    <article key={order.id || order.db_id} className="order-card">
                       <div className="order-card-header">
                         <div className="order-meta">
-                          <span className="order-id">{order.id}</span>
-                          <span className="order-date">Realizado el {order.fecha}</span>
+                          <span className="order-id">#{order.id}</span>
+                          <span className="order-date">
+                            Realizado el {formatDate(order.fecha)}
+                          </span>
                         </div>
                         <span
-                          className={`order-status badge-${order.estado
+                          className={`order-status badge-${(order.estado || "pending")
                             .toLowerCase()
                             .replace(/\s+/g, "-")}`}
                         >
@@ -135,11 +159,11 @@ export default function ProfilePage({ user = MOCK_USER_PROFILE, onBackToHome }) 
 
                       <div className="order-card-body">
                         <ul className="order-items-list">
-                          {order.items.map((it, idx) => (
+                          {(order.items || []).map((it, idx) => (
                             <li key={idx} className="order-item-row">
                               <span className="item-name">
                                 {it.name}{" "}
-                                {it.size !== "N/A" && (
+                                {it.size && it.size !== "N/A" && (
                                   <span className="item-size">· Talla {it.size}</span>
                                 )}
                                 <span className="item-qty"> x{it.quantity}</span>
