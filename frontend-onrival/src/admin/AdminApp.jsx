@@ -7,6 +7,7 @@ import EmployeesPage from "./Users/UsersPage";
 import OrdersPage from "./Orders/OrdersPage";
 import OrderDetail from "./Orders/OrderDetail";
 import OffersPage from "./Offers/OffersPage";
+import HeroSlidesPage from "./Destacados/HeroSlidesPage";
 
 // Todo lo del panel de admin vive acá adentro, como un "sub-app" propio.
 // Se monta desde App.jsx cuando el usuario logueado tiene rol "admin".
@@ -34,6 +35,7 @@ export default function AdminApp({ onExitAdmin }) {
         ))}
 
       {view === "ofertas" && <OffersPage />}
+      {view === "destacados" && <HeroSlidesPage />}
     </AdminLayout>
   );
 }

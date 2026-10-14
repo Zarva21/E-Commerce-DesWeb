@@ -11,7 +11,7 @@ import CatalogSection from "./components/Catalog/CatalogSection";
 import ProductDetail from "./components/Product/ProductDetail";
 import LoginPanel from "./components/Auth/LoginPanel";
 import CartPage from "./components/Cart/CartPage";
-import ProfilePage from "./components/Profile/ProfilePage"; // <-- Importar ProfilePage
+import ProfilePage from "./components/Profile/ProfilePage";
 import ShippingPage from "./components/Checkout/ShippingPage";
 import CheckoutPage from "./components/Checkout/CheckoutPage";
 import AdminApp from "./admin/AdminApp";
@@ -28,6 +28,8 @@ export default function App() {
   const [selectedProductId, setSelectedProductId] = useState(null);
   const [shippingData, setShippingData] = useState(null);
 
+  // Filtro que viene de un destacado: { kind: "offers" } | { kind: "category", categoryId } | null
+  const [catalogFilter, setCatalogFilter] = useState(null);
   // "admin" | "cliente" | null
   const [userRole, setUserRole] = useState(() => authService.getUserRole());
   const isLoggedIn = userRole !== null;
@@ -35,11 +37,30 @@ export default function App() {
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginTab, setLoginTab] = useState("login");
 
-  const handleSelectSection = (sectionId) => { setActiveSection(sectionId); setView("catalog"); };
+  const handleSelectSection = (sectionId) => {
+    setActiveSection(sectionId);
+    setCatalogFilter(null); // navegar normal quita el filtro del destacado
+    setView("catalog");
+  };
   const handleSelectProduct = (productId) => { setSelectedProductId(productId); setView("product"); };
   const handleLogoClick = () => setView("home");
   const handleOpenCart = () => setView("cart");
-  const handleOpenProfile = () => setView("profile"); // <-- Función para abrir el perfil
+  const handleOpenProfile = () => setView("profile");
+
+  // Lo que pasa al darle click al botón de un destacado del carrusel
+  const handleHeroAction = (link) => {
+    if (link.type === "product") {
+      handleSelectProduct(link.productId);
+    }
+    if (link.type === "offers") {
+      handleSelectSection("catalogo");
+      setCatalogFilter({ kind: "offers" });
+    }
+    if (link.type === "category") {
+      handleSelectSection("catalogo");
+      setCatalogFilter({ kind: "category", category: link.category });
+    }
+  };
 
   const openLogin = (tab) => {
     setLoginTab(tab);
@@ -71,7 +92,7 @@ export default function App() {
         onLogoClick={handleLogoClick}
         isLoggedIn={isLoggedIn}
         onOpenLogin={openLogin}
-        onOpenProfile={handleOpenProfile} // <-- Se pasa al Header
+        onOpenProfile={handleOpenProfile}
         onOpenCart={handleOpenCart}
         onLogout={handleLogout}
         cartCount={count}
@@ -79,14 +100,19 @@ export default function App() {
 
       {view === "home" && (
         <>
-          <HeroCarousel onSelectProduct={handleSelectProduct} />
+          <HeroCarousel onAction={handleHeroAction} />
           <CatalogTeaser onViewCatalog={() => handleSelectSection("catalogo")} />
           <HomeProductCarousel onSelectProduct={handleSelectProduct} onViewCatalog={() => handleSelectSection("catalogo")} />
         </>
       )}
 
       {view === "catalog" && (
-        <CatalogSection section={activeSection} onSelectSection={handleSelectSection} onSelectProduct={handleSelectProduct} />
+        <CatalogSection
+          section={activeSection}
+          filter={catalogFilter}
+          onSelectSection={handleSelectSection}
+          onSelectProduct={handleSelectProduct}
+        />
       )}
 
       {view === "product" && (
@@ -102,11 +128,9 @@ export default function App() {
       )}
 
       {view === "profile" && (
-        <ProfilePage
-          onBackToHome={() => setView("home")}
-        />
+        <ProfilePage onBackToHome={() => setView("home")} />
       )}
-      
+
       {view === "shipping" && (
         <ShippingPage
           isLoggedIn={isLoggedIn}
