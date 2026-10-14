@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import PageHeader from "../ui/PageHeader";
 import StatusBadge from "../ui/StatusBadge";
+import CategoryCascader from "./CategoryCascader";
+import { buildCategoryTree, categoryPathLabel } from "./categoryTree";
 import {
   MOCK_PRODUCTS,
   MOCK_BRANDS,
@@ -17,14 +19,21 @@ const formatPrice = (value) =>
     minimumFractionDigits: 2,
   }).format(value);
 
+const toId = (v) => (v === "" || v == null ? null : Number(v));
+
 export default function CatalogPage() {
   const [activeTab, setActiveTab] = useState("products"); // 'products' | 'brands' | 'categories' | 'suppliers'
-  
+
   // Estados de datos
   const [products, setProducts] = useState(MOCK_PRODUCTS);
-  const [brands, setBrands] = useState(MOCK_BRANDS);
-  const [categories, setCategories] = useState(MOCK_CATEGORIES);
-  const [suppliers, setSuppliers] = useState(MOCK_SUPPLIERS);
+  const [brands] = useState(MOCK_BRANDS);
+  const [categories] = useState(MOCK_CATEGORIES);
+  const [suppliers] = useState(MOCK_SUPPLIERS);
+
+  // Árbol de categorías para el menú en cascada.
+  // TODO: con backend, esto viene de getTree() y ya no se arma acá.
+  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
+  const categoryLabel = (id) => categoryPathLabel(categoryTree, id) || "Sin categoría";
 
   // Filtro
   const [searchQuery, setSearchQuery] = useState("");
@@ -65,34 +74,33 @@ export default function CatalogPage() {
   // Guardar nuevo producto o edición
   const handleSaveProduct = (e) => {
     e.preventDefault();
+
+    const data = {
+      ...productForm,
+      cost_price: Number(productForm.cost_price),
+      sale_price: Number(productForm.sale_price),
+      brand_id: toId(productForm.brand_id),
+      category_id: toId(productForm.category_id),
+      supplier_id: toId(productForm.supplier_id),
+    };
+    const related = {
+      brand: brands.find((b) => b.id === data.brand_id),
+      category: categories.find((c) => c.id === data.category_id),
+      supplier: suppliers.find((s) => s.id === data.supplier_id),
+    };
+
     if (selectedProduct) {
       // Editar
       setProducts((prev) =>
-        prev.map((p) =>
-          p.id === selectedProduct.id
-            ? {
-                ...p,
-                ...productForm,
-                cost_price: Number(productForm.cost_price),
-                sale_price: Number(productForm.sale_price),
-                brand: brands.find((b) => b.id === Number(productForm.brand_id)),
-                category: categories.find((c) => c.id === Number(productForm.category_id)),
-                supplier: suppliers.find((s) => s.id === Number(productForm.supplier_id)),
-              }
-            : p
-        )
+        prev.map((p) => (p.id === selectedProduct.id ? { ...p, ...data, ...related } : p))
       );
     } else {
       // Crear
       const newProd = {
         id: Date.now(),
         public_id: crypto.randomUUID(),
-        ...productForm,
-        cost_price: Number(productForm.cost_price),
-        sale_price: Number(productForm.sale_price),
-        brand: brands.find((b) => b.id === Number(productForm.brand_id)),
-        category: categories.find((c) => c.id === Number(productForm.category_id)),
-        supplier: suppliers.find((s) => s.id === Number(productForm.supplier_id)),
+        ...data,
+        ...related,
         variants: [],
         images: [],
       };
@@ -109,7 +117,7 @@ export default function CatalogPage() {
       cost_price: "",
       sale_price: "",
       brand_id: brands[0]?.id || "",
-      category_id: categories[0]?.id || "",
+      category_id: "",
       supplier_id: suppliers[0]?.id || "",
       is_active: true,
     });
@@ -254,7 +262,7 @@ export default function CatalogPage() {
                   </td>
                   <td>
                     <div>{item.brand?.name || "Sin marca"}</div>
-                    <span className="data-cell-muted">{item.category?.name || "Sin categoría"}</span>
+                    <span className="data-cell-muted">{categoryLabel(item.category_id)}</span>
                   </td>
                   <td>{formatPrice(item.cost_price)}</td>
                   <td><strong>{formatPrice(item.sale_price)}</strong></td>
@@ -441,15 +449,15 @@ export default function CatalogPage() {
                 </div>
 
                 <div className="form-group">
-                  <label>Categoría</label>
+                  <label>Proveedor</label>
                   <select
-                    value={productForm.category_id}
-                    onChange={(e) => setProductForm({ ...productForm, category_id: e.target.value })}
+                    value={productForm.supplier_id}
+                    onChange={(e) => setProductForm({ ...productForm, supplier_id: e.target.value })}
                   >
-                    <option value="">Seleccione categoría...</option>
-                    {categories.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
+                    <option value="">Seleccione proveedor...</option>
+                    {suppliers.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
                       </option>
                     ))}
                   </select>
@@ -457,18 +465,12 @@ export default function CatalogPage() {
               </div>
 
               <div className="form-group">
-                <label>Proveedor</label>
-                <select
-                  value={productForm.supplier_id}
-                  onChange={(e) => setProductForm({ ...productForm, supplier_id: e.target.value })}
-                >
-                  <option value="">Seleccione proveedor...</option>
-                  {suppliers.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                <label>Categoría</label>
+                <CategoryCascader
+                  tree={categoryTree}
+                  value={productForm.category_id}
+                  onChange={(id) => setProductForm({ ...productForm, category_id: id })}
+                />
               </div>
 
               <div className="form-group">

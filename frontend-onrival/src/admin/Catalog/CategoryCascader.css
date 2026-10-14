@@ -1,0 +1,24 @@
+.cascader-trigger { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; font: inherit; font-size: 14px; color: #1e293b; text-align: left; cursor: pointer; }
+.cascader-trigger:hover, .cascader-trigger-open { border-color: #7c3aed; }
+.cascader-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cascader-placeholder { color: #94a3b8; }
+.cascader-caret { flex-shrink: 0; width: 7px; height: 7px; border-right: 2px solid #64748b; border-bottom: 2px solid #64748b; transform: rotate(45deg) translateY(-2px); }
+
+/* position: fixed + portal: el modal tiene overflow y cortaría el panel */
+.cascader-panel { position: fixed; z-index: 1100; display: flex; align-items: flex-start; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); overflow-x: auto; }
+.cascader-col { list-style: none; margin: 0; padding: 6px; min-width: 190px; max-height: var(--cascader-max-h, 320px); overflow-y: auto; border-right: 1px solid #f1f5f9; }
+.cascader-col:last-child { border-right: none; }
+
+.cascader-item { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: none; border-radius: 6px; background: transparent; font: inherit; font-size: 13.5px; color: #334155; text-align: left; cursor: pointer; }
+.cascader-item:hover, .cascader-item:focus-visible, .cascader-item-open { background: #f3e8ff; color: #4c1d95; outline: none; }
+.cascader-item-selected { font-weight: 700; color: #4c1d95; }
+.cascader-arrow { font-size: 16px; line-height: 1; color: #94a3b8; }
+.cascader-item-open .cascader-arrow { color: #4c1d95; }
+.cascader-clear { color: #64748b; font-style: italic; margin-bottom: 4px; border-bottom: 1px solid #f1f5f9; border-radius: 6px 6px 0 0; }
+
+/* pantallas angostas: los niveles se apilan en vez de abrirse al costado */
+@media (max-width: 560px) {
+  .cascader-panel { flex-direction: column; left: 12px !important; right: 12px; max-width: none !important; max-height: var(--cascader-max-h, 320px); overflow-y: auto; }
+  .cascader-col { max-height: none; border-right: none; border-bottom: 1px solid #f1f5f9; }
+  .cascader-col:last-child { border-bottom: none; }
+}

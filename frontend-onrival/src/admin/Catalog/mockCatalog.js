@@ -1,60 +1,100 @@
-export const MOCK_BRANDS = [
-  { id: 1, name: "Adidas", description: "Marca de ropa deportiva", logo_url: "" },
-  { id: 2, name: "Nike", description: "Just Do It", logo_url: "" },
-];
+// Datos de prueba del admin, GENERADOS a partir de los productos de la tienda
+// (components/Catalog/mockProducts), para que ambos lados muestren lo mismo.
+// Estructura de categorías: raíces = secciones de la tienda (Hombre, Mujer, Accesorios)
+// y sus hijas = la categoría de cada producto (Camiseta, Zapatos, ...).
+// TODO: cuando haya backend, todo esto viene de la API y este archivo se elimina.
+import { MOCK_PRODUCTS as STORE_PRODUCTS } from "../../components/Catalog/mockProducts";
 
-export const MOCK_CATEGORIES = [
-  { id: 1, name: "Hombre", parent_category_id: null },
-  { id: 2, name: "Mujer", parent_category_id: null },
-  { id: 3, name: "Calzado", parent_category_id: 1 },
-  { id: 4, name: "Ropa", parent_category_id: 1 },
-];
+const capitalize = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// Productos de la tienda sin repetir, recordando en qué sección están
+const storeItems = [];
+const seen = new Set();
+Object.entries(STORE_PRODUCTS)
+  .filter(([section]) => section !== "catalogo")
+  .forEach(([section, list]) => {
+    list.forEach((p) => {
+      if (seen.has(p.id)) return;
+      seen.add(p.id);
+      storeItems.push({ ...p, section });
+    });
+  });
+
+// ---------- MARCAS ----------
+const BRAND_DESCRIPTIONS = { Adidas: "Marca de ropa deportiva", Nike: "Just Do It" };
+const brandNames = [...new Set(storeItems.map((p) => p.brand).filter(Boolean))];
+
+export const MOCK_BRANDS = brandNames.map((name, i) => ({
+  id: i + 1,
+  name,
+  description: BRAND_DESCRIPTIONS[name] ?? "",
+  logo_url: "",
+}));
+
+// ---------- CATEGORÍAS (árbol de 2 niveles) ----------
+const sections = [...new Set(storeItems.map((p) => p.section))];
+const categoryIdByKey = new Map(); // "hombre|Camiseta" -> id
+export const MOCK_CATEGORIES = [];
+
+sections.forEach((section) => {
+  MOCK_CATEGORIES.push({ id: MOCK_CATEGORIES.length + 1, name: capitalize(section), parent_category_id: null });
+});
+
+sections.forEach((section) => {
+  const rootId = MOCK_CATEGORIES.find((c) => c.name === capitalize(section)).id;
+  const names = [...new Set(storeItems.filter((p) => p.section === section).map((p) => p.category).filter(Boolean))];
+  names.forEach((name) => {
+    const id = MOCK_CATEGORIES.length + 1;
+    MOCK_CATEGORIES.push({ id, name, parent_category_id: rootId });
+    categoryIdByKey.set(`${section}|${name}`, id);
+  });
+});
+
+// ---------- PROVEEDORES ----------
 export const MOCK_SUPPLIERS = [
   { id: 1, name: "Distribuidora Deportiva S.A.", contact_email: "contacto@distdeportiva.com", phone: "+502 2222-3333" },
   { id: 2, name: "Importadora Global GT", contact_email: "ventas@importgt.com", phone: "+502 4444-5555" },
 ];
 
-export const MOCK_PRODUCTS = [
-  {
-    id: 1,
-    public_id: "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11",
-    name: "Tacos F50 Pro Firm",
-    description: "Tacos de fútbol para terreno firme de alto rendimiento.",
-    cost_price: 1100.0,
-    sale_price: 1850.0,
+// ---------- PRODUCTOS ----------
+// Si algún campo de tu mockProducts de la tienda se llama distinto, se ajusta SOLO acá.
+const toAdminProduct = (p, i) => {
+  const name = p.name ?? p.title ?? `Producto ${i + 1}`;
+  const brand = MOCK_BRANDS.find((b) => b.name === p.brand) ?? null;
+  const category_id = categoryIdByKey.get(`${p.section}|${p.category}`) ?? MOCK_CATEGORIES.find((c) => c.name === capitalize(p.section))?.id ?? null;
+  const category = MOCK_CATEGORIES.find((c) => c.id === category_id) ?? null;
+  const supplier = MOCK_SUPPLIERS[0];
+  const img = p.image ?? p.img ?? p.images?.[0];
+  const price = Number(p.price) || 0;
+
+  return {
+    id: i + 1,
+    store_id: p.id, // id que usa la tienda (ProductDetail, destacados)
+    public_id: `00000000-0000-4000-8000-${String(i + 1).padStart(12, "0")}`,
+    name,
+    description: p.description ?? "",
+    cost_price: Math.round(price * 0.6 * 100) / 100, // PLACEHOLDER: costo estimado (60% del precio)
+    sale_price: price,
     is_active: true,
-    brand_id: 1,
-    category_id: 3,
-    supplier_id: 1,
-    brand: { id: 1, name: "Adidas" },
-    category: { id: 3, name: "Calzado" },
-    supplier: { id: 1, name: "Distribuidora Deportiva S.A." },
-    variants: [
-      { id: 101, sku: "ADI-F50-41", color: "Azul/Blanco", size: "41", is_active: true },
-      { id: 102, sku: "ADI-F50-42", color: "Azul/Blanco", size: "42", is_active: true }
-    ],
-    images: [
-      { id: 1001, image_url: "/img/zapato1.jpg", alt_text: "Frestal Vista", is_primary: true }
-    ]
-  },
-  {
-    id: 2,
-    public_id: "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a22",
-    name: "Playera Dri-FIT",
-    description: "Playera transpirable para entrenamiento.",
-    cost_price: 80.0,
-    sale_price: 180.0,
-    is_active: false,
-    brand_id: 2,
-    category_id: 4,
-    supplier_id: 2,
-    brand: { id: 2, name: "Nike" },
-    category: { id: 4, name: "Ropa" },
-    supplier: { id: 2, name: "Importadora Global GT" },
-    variants: [
-      { id: 103, sku: "NIK-DFIT-M", color: "Negro", size: "M", is_active: true }
-    ],
-    images: []
-  }
-];
+    brand_id: brand?.id ?? null,
+    category_id,
+    supplier_id: supplier.id,
+    brand: brand ? { id: brand.id, name: brand.name } : null,
+    category: category ? { id: category.id, name: category.name } : null,
+    supplier: { id: supplier.id, name: supplier.name },
+    variants: Array.isArray(p.sizes)
+      ? p.sizes.map((s, j) => ({
+          id: (i + 1) * 100 + j,
+          sku: `${String(p.id).toUpperCase()}-${String(s?.size ?? s)}`,
+          color: p.color ?? "",
+          size: String(s?.size ?? s),
+          is_active: true,
+        }))
+      : [],
+    images: typeof img === "string" && img
+      ? [{ id: (i + 1) * 1000, image_url: img, alt_text: name, is_primary: true }]
+      : [],
+  };
+};
+
+export const MOCK_PRODUCTS = storeItems.map(toAdminProduct);
