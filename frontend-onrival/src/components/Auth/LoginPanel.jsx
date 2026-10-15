@@ -6,6 +6,7 @@ const EMPTY_FORM = { nombre: "", apellido: "", telefono: "", email: "", password
 // TODO: cuando haya backend, este mail hardcodeado se reemplaza por el rol
 // que devuelva la API en la respuesta del login.
 const ADMIN_EMAIL = "admin@onrival.com";
+const EMPLOYEE_EMAIL = "empleado@onrival.com";
 
 export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }) {
   const [tab, setTab] = useState(initialTab ?? "login");
@@ -35,7 +36,8 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
     console.log("submit", tab, form);
 
     // TODO: reemplazar por la respuesta real del backend (el rol viene de ahí)
-    const role = form.email.trim().toLowerCase() === ADMIN_EMAIL ? "admin" : "cliente";
+    const email = form.email.trim().toLowerCase();
+    const role = email === ADMIN_EMAIL ? "admin" : email === EMPLOYEE_EMAIL ? "empleado" : "cliente";
 
     onLoginSuccess?.(role);
     setForm(EMPTY_FORM);

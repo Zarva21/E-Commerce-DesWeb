@@ -26,7 +26,9 @@ function stockBadge(quantityOnHand, reorderLevel) {
   return <StatusBadge label="Disponible" tone="success" />;
 }
 
-export default function InventoryPage() {
+// canAddProduct: puede crear productos nuevos desde el inventario (solo admin).
+// Sin permiso sigue pudiendo ajustar stock y ver el historial.
+export default function InventoryPage({ canAddProduct = true }) {
   const [inventory, setInventory] = useState(MOCK_INVENTORY);
   const [movements, setMovements] = useState(MOCK_MOVEMENTS);
   const [activeTab, setActiveTab] = useState("stock"); // 'stock' | 'movements'
@@ -40,6 +42,12 @@ export default function InventoryPage() {
     notes: "",
   });
   const [errorMsg, setErrorMsg] = useState("");
+
+  const handleCreateProduct = () => {
+    if (!canAddProduct) return;
+    // TODO: abrir el formulario de nuevo producto
+    console.log("Crear producto");
+  };
 
   const handleOpenAdjustModal = (item) => {
     setSelectedVariant(item);
@@ -63,7 +71,7 @@ export default function InventoryPage() {
     }
 
     const isOutgoing = ["DAMAGE_OUT", "SUPPLIER_RETURN_OUT"].includes(movementForm.movement_type);
-    
+
     // Validación de stock mínimo para salidas
     if (isOutgoing && selectedVariant.quantity_on_hand < qty) {
       setErrorMsg(`Stock insuficiente. Solo hay ${selectedVariant.quantity_on_hand} unidades disponibles.`);
@@ -102,8 +110,8 @@ export default function InventoryPage() {
       <PageHeader
         title="Gestión de Inventario"
         subtitle="Control de existencias y movimientos por variante"
-        actionLabel="Nuevo Producto"
-        onAction={() => console.log("Crear producto")}
+        actionLabel={canAddProduct ? "Nuevo Producto" : null}
+        onAction={canAddProduct ? handleCreateProduct : null}
       />
 
       {/* Tabs de Navegación */}

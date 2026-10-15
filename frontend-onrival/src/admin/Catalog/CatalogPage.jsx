@@ -21,7 +21,22 @@ const formatPrice = (value) =>
 
 const toId = (v) => (v === "" || v == null ? null : Number(v));
 
-export default function CatalogPage() {
+const VariantIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 3 3 8l9 5 9-5-9-5Z" />
+    <path d="m3 13 9 5 9-5" />
+  </svg>
+);
+
+const PlusIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
+
+// canCreate: puede crear productos nuevos. canToggle: puede activar/desactivar productos.
+// Con ambos en false (rol empleado) solo puede editar.
+export default function CatalogPage({ canCreate = true, canToggle = true }) {
   const [activeTab, setActiveTab] = useState("products"); // 'products' | 'brands' | 'categories' | 'suppliers'
 
   // Estados de datos
@@ -66,6 +81,7 @@ export default function CatalogPage() {
 
   // Manejo de estado activo/inactivo de producto
   const handleToggleProductStatus = (id) => {
+    if (!canToggle) return;
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, is_active: !p.is_active } : p))
     );
@@ -96,6 +112,7 @@ export default function CatalogPage() {
       );
     } else {
       // Crear
+      if (!canCreate) return;
       const newProd = {
         id: Date.now(),
         public_id: crypto.randomUUID(),
@@ -110,6 +127,7 @@ export default function CatalogPage() {
   };
 
   const openCreateModal = () => {
+    if (!canCreate) return;
     setSelectedProduct(null);
     setProductForm({
       name: "",
@@ -182,8 +200,8 @@ export default function CatalogPage() {
       <PageHeader
         title="Catálogo de Productos"
         subtitle="Administra publicaciones, precios, marcas, categorías y proveedores"
-        actionLabel={activeTab === "products" ? "Nuevo Producto" : null}
-        onAction={activeTab === "products" ? openCreateModal : null}
+        actionLabel={activeTab === "products" && canCreate ? "Nuevo Producto" : null}
+        onAction={activeTab === "products" && canCreate ? openCreateModal : null}
       />
 
       {/* Tabs Principales */}
@@ -244,63 +262,81 @@ export default function CatalogPage() {
               </tr>
             </thead>
             <tbody>
-              {filteredProducts.map((item) => (
-                <tr key={item.id}>
-                  <td>
-                    <div className="data-cell-main">
-                      <div className="data-cell-thumb">
-                        <img
-                          src={item.images[0]?.image_url || "/img/placeholder.png"}
-                          alt={item.name}
-                        />
+              {filteredProducts.map((item) => {
+                const variantCount = item.variants.length;
+                const variantSizes = item.variants.map((v) => v.size).filter(Boolean).join(", ");
+
+                return (
+                  <tr key={item.id}>
+                    <td>
+                      <div className="data-cell-main">
+                        <div className="data-cell-thumb">
+                          <img
+                            src={item.images[0]?.image_url || "/img/placeholder.png"}
+                            alt={item.name}
+                          />
+                        </div>
+                        <div>
+                          <span className="data-cell-title">{item.name}</span>
+                          <div className="data-cell-muted">ID: {item.public_id.slice(0, 8)}...</div>
+                        </div>
                       </div>
-                      <div>
-                        <span className="data-cell-title">{item.name}</span>
-                        <div className="data-cell-muted">ID: {item.public_id.slice(0, 8)}...</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div>{item.brand?.name || "Sin marca"}</div>
-                    <span className="data-cell-muted">{categoryLabel(item.category_id)}</span>
-                  </td>
-                  <td>{formatPrice(item.cost_price)}</td>
-                  <td><strong>{formatPrice(item.sale_price)}</strong></td>
-                  <td>
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={() => setEditingVariantProduct(item)}
-                    >
-                      {item.variants.length} Talla(s)/SKUs
-                    </button>
-                  </td>
-                  <td>
-                    <StatusBadge
-                      label={item.is_active ? "Activo" : "Inactivo"}
-                      tone={item.is_active ? "success" : "muted"}
-                    />
-                  </td>
-                  <td>
-                    <div className="data-actions">
+                    </td>
+                    <td>
+                      <div>{item.brand?.name || "Sin marca"}</div>
+                      <span className="data-cell-muted">{categoryLabel(item.category_id)}</span>
+                    </td>
+                    <td>{formatPrice(item.cost_price)}</td>
+                    <td><strong>{formatPrice(item.sale_price)}</strong></td>
+                    <td>
                       <button
                         type="button"
-                        className="data-action-btn"
-                        onClick={() => openEditModal(item)}
+                        className={`variant-btn ${variantCount === 0 ? "variant-btn-empty" : ""}`}
+                        onClick={() => setEditingVariantProduct(item)}
+                        title={
+                          variantCount === 0
+                            ? "Este producto aún no tiene variantes"
+                            : `Tallas: ${variantSizes || "sin talla definida"}`
+                        }
+                        aria-label={`Gestionar variantes de ${item.name}`}
                       >
-                        Editar
+                        {variantCount === 0 ? <PlusIcon /> : <VariantIcon />}
+                        <span>
+                          {variantCount === 0
+                            ? "Agregar"
+                            : `${variantCount} ${variantCount === 1 ? "variante" : "variantes"}`}
+                        </span>
                       </button>
-                      <button
-                        type="button"
-                        className="data-action-btn"
-                        onClick={() => handleToggleProductStatus(item.id)}
-                      >
-                        {item.is_active ? "Desactivar" : "Activar"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td>
+                      <StatusBadge
+                        label={item.is_active ? "Activo" : "Inactivo"}
+                        tone={item.is_active ? "success" : "muted"}
+                      />
+                    </td>
+                    <td>
+                      <div className="data-actions">
+                        <button
+                          type="button"
+                          className="data-action-btn"
+                          onClick={() => openEditModal(item)}
+                        >
+                          Editar
+                        </button>
+                        {canToggle && (
+                          <button
+                            type="button"
+                            className="data-action-btn"
+                            onClick={() => handleToggleProductStatus(item.id)}
+                          >
+                            {item.is_active ? "Desactivar" : "Activar"}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 

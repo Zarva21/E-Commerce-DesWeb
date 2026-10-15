@@ -3,7 +3,7 @@ import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 import "./AdminLayout.css";
 
-export default function AdminLayout({ activeView, onSelectView, onExitAdmin, children }) {
+export default function AdminLayout({ activeView, onSelectView, onExitAdmin, allowedViews, userLabel, children }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const handleSelectView = (view) => {
@@ -14,7 +14,12 @@ export default function AdminLayout({ activeView, onSelectView, onExitAdmin, chi
   return (
     <div className="admin-layout">
       <div className={`sidebar-wrap ${sidebarOpen ? "sidebar-open" : ""}`}>
-        <Sidebar activeView={activeView} onSelectView={handleSelectView} onExitAdmin={onExitAdmin} />
+        <Sidebar
+          activeView={activeView}
+          onSelectView={handleSelectView}
+          onExitAdmin={onExitAdmin}
+          allowedViews={allowedViews}
+        />
       </div>
 
       {sidebarOpen && (
@@ -22,7 +27,11 @@ export default function AdminLayout({ activeView, onSelectView, onExitAdmin, chi
       )}
 
       <div className="admin-main">
-        <Topbar activeView={activeView} onToggleSidebar={() => setSidebarOpen((o) => !o)} />
+        <Topbar
+          activeView={activeView}
+          onToggleSidebar={() => setSidebarOpen((o) => !o)}
+          adminName={userLabel}
+        />
         <div className="admin-content">{children}</div>
       </div>
     </div>
