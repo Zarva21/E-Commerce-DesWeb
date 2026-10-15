@@ -1,5 +1,5 @@
 // coupon.controller.js
-
+const marketingService = require("../marketing.service.js")
 const couponService = require("./coupon.service.js");
 const db = require("../../index.js");
 
@@ -52,24 +52,27 @@ exports.remove = async (req, res) => {
  */
 exports.validate = async (req, res) => {
   try {
-    const { code, subtotal } = req.body;
+    const { code, subtotal, cartItems } = req.body; // 👈 Recibir también cartItems
     if (!code) return res.status(400).send({ message: "El código del cupón es obligatorio." });
     if (subtotal === undefined) {
       return res.status(400).send({ message: "El subtotal es obligatorio." });
     }
 
-    // Si el usuario viene autenticado, resolvemos su customer_id para poder
-    // aceptar cupones nominales (Store Credit). Si es invitado, queda undefined.
     let customerId;
     if (req.userId) {
       const customer = await db.customer.findOne({ where: { user_id: req.userId } });
       if (customer) customerId = customer.id;
     }
 
-    const result = await couponService.validate(code, { subtotal, customerId });
+    // Usar la validación completa con reglas de combo y categoría
+    const result = await marketingService.validateCoupon(code.trim().toUpperCase(), {
+      subtotal: Number(subtotal),
+      customerId,
+      cartItems: cartItems || []
+    });
 
     if (!result) {
-      return res.status(404).send({ valid: false, message: "Cupón inválido, vencido o agotado." });
+      return res.status(404).send({ valid: false, message: "Cupón inválido, expirado o no aplicable a este carrito." });
     }
 
     res.status(200).send({ valid: true, ...result });
@@ -77,7 +80,6 @@ exports.validate = async (req, res) => {
     res.status(err.status || 500).send({ message: err.message });
   }
 };
-
 /**
  * POST /marketing/coupons/store-credit -> { customer_id, amount }
  * Lo usa el personal cuando autoriza una devolución de mercadería.

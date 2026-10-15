@@ -4,12 +4,17 @@ const checkoutService = require("./checkout.service.js");
 exports.createIntent = async (req, res) => {
   try {
     const { cart_id, coupon_code } = req.body;
-    const result = await checkoutService.createIntent({
+    if (!cart_id) {
+      return res.status(400).send({ message: "cart_id es obligatorio." });
+    }
+
+    const data = await checkoutService.createIntent({
       cartId: cart_id,
-      couponCode: coupon_code,
-      userId: req.userId || null
+      couponCode: coupon_code || null,
+      userId: req.userId || null,
     });
-    res.status(200).send(result);
+
+    res.status(200).send(data);
   } catch (err) {
     res.status(err.status || 500).send({ message: err.message });
   }

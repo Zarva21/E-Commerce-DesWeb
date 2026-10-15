@@ -3,6 +3,7 @@ import { loadStripe } from "@stripe/stripe-js";
 import { Elements, useStripe, useElements, CardNumberElement } from "@stripe/react-stripe-js";
 import { useCart } from "../../context/CartContext";
 import { checkoutService } from "../../services/checkoutService";
+import { couponService } from "../../services/couponService";
 import { SHIPPING_COST } from "./shippingCost";
 import StripeCardFields from "./StripeCardFields";
 import "./CheckoutPage.css";
@@ -32,7 +33,45 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
   const [errorMessage, setErrorMessage] = useState(null);
   const [confirmedOrder, setConfirmedOrder] = useState(null);
 
-  const total = subtotal + SHIPPING_COST;
+  // Estados para Cupones
+  const [couponInput, setCouponInput] = useState("");
+  const [couponLoading, setCouponLoading] = useState(false);
+  const [couponError, setCouponError] = useState(null);
+  const [appliedCoupon, setAppliedCoupon] = useState(null); // { code, discount_amount, coupon_id }
+
+  // Cálculo del total con descuento
+  const discount = appliedCoupon ? appliedCoupon.discount_amount : 0;
+  const total = Math.max(0, subtotal - discount) + SHIPPING_COST;
+
+  // Manejador de validación de cupón
+  const handleApplyCoupon = async (e) => {
+    e.preventDefault();
+    if (!couponInput.trim()) return;
+
+    setCouponLoading(true);
+    setCouponError(null);
+
+    try {
+      const res = await couponService.validate(couponInput.trim(), subtotal, items);
+      setAppliedCoupon({
+        code: couponInput.trim().toUpperCase(),
+        discount_amount: Number(res.discount_amount),
+        coupon_id: res.coupon_id,
+      });
+      setCouponInput("");
+    } catch (err) {
+      setCouponError(err.response?.data?.message || "Cupón no válido o no aplicable.");
+      setAppliedCoupon(null);
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponError(null);
+    setCouponInput("");
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,7 +79,6 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
     setLoading(true);
 
     try {
-      // 1. Obtener o crear carrito en la BD (cliente o invitado)
       const authUser = JSON.parse(localStorage.getItem("user") || "{}");
       let cartId = null;
 
@@ -58,14 +96,14 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
         cartId = guestCart.id || guestCart.cart_id;
       }
 
-      // 2. Sincronizar ítems en el carrito de la BD
+      // Sincronizar ítems en el carrito de la BD
       for (const item of items) {
         await checkoutService.addItemToCart(cartId, item.product_variant_id, item.quantity);
       }
 
       let stripePaymentIntentId = null;
 
-      // 3. Si eligió tarjeta, procesar cobro en Stripe
+      // Si es tarjeta, se crea el intent considerando el cupón
       if (paymentMethod === "CARD") {
         if (!stripe || !elements) {
           throw new Error("El módulo de pagos no está listo todavía.");
@@ -73,11 +111,12 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
 
         const cardNumberElement = elements.getElement(CardNumberElement);
 
-        console.log("Creando PaymentIntent en backend para cartId:", cartId);
-        const intentRes = await checkoutService.createPaymentIntent(cartId);
+        const intentRes = await checkoutService.createPaymentIntent(
+          cartId,
+          appliedCoupon?.code || null
+        );
         const { client_secret, payment_intent_id } = intentRes;
 
-        console.log("Confirmando pago en Stripe con client_secret...");
         const stripePaymentResult = await stripe.confirmCardPayment(client_secret, {
           payment_method: {
             card: cardNumberElement,
@@ -100,7 +139,7 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
         stripePaymentIntentId = payment_intent_id;
       }
 
-      // 4. Construcción del payload según Joi y método de pago
+      // Payload para confirmCheckout
       const hasSavedAddress =
         shippingData.address_id !== null &&
         shippingData.address_id !== undefined &&
@@ -110,7 +149,8 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
 
       let confirmPayload = {
         cart_id: cartId,
-        payment_method: paymentMethod, // "CARD" o "CASH"
+        payment_method: paymentMethod,
+        coupon_code: appliedCoupon ? appliedCoupon.code : null, // 👈 Se envía el cupón
       };
 
       if (paymentMethod === "CARD") {
@@ -118,12 +158,9 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
       }
 
       if (isRegisteredUser) {
-        // CLIENTE REGISTRADO CON DIRECCIÓN PREVIA
         confirmPayload.address_id = Number(shippingData.address_id);
       } else {
-        // GHOST USER O DIRECCIÓN NUEVA
         const [firstName, ...restName] = (shippingData.nombre || "").trim().split(" ");
-
         const guestAddress = {
           country: "GT",
           city: shippingData.ciudad || "Guatemala",
@@ -143,9 +180,7 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
         };
       }
 
-      console.log("Enviando confirmCheckout al backend:", confirmPayload);
       const orderResult = await checkoutService.confirmCheckout(confirmPayload);
-      console.log("¡Orden confirmada en el backend!", orderResult);
 
       clearCart();
       localStorage.removeItem("cart_id");
@@ -172,7 +207,7 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
         <p>Método de pago: <strong>{paymentMethod === "CASH" ? "Pago contra entrega (Pendiente)" : "Tarjeta de crédito/débito"}</strong></p>
         <p>Enviamos la confirmación a <strong>{shippingData.email}</strong>.</p>
         <button type="button" className="checkout-submit" onClick={onFinish}>
-          <span>Volver al menú principal</span>
+          <span>Volver al inicio</span>
         </button>
       </section>
     );
@@ -232,7 +267,7 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
             </div>
           </fieldset>
 
-          {/* Formulario de Stripe sólo si eligió TARJETA */}
+          {/* Formulario de Stripe si eligió tarjeta */}
           {paymentMethod === "CARD" ? (
             <div style={{ marginTop: "1rem", marginBottom: "1.5rem" }}>
               <StripeCardFields
@@ -243,7 +278,7 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
             </div>
           ) : (
             <div style={{ padding: "1rem", backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", marginBottom: "1.5rem", color: "#334155" }}>
-               Pagas el total en efectivo al momento de recibir el paquete en la puerta de tu casa.
+              Pagas el total en efectivo al momento de recibir el paquete en la puerta de tu casa.
             </div>
           )}
 
@@ -252,8 +287,8 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
               {loading
                 ? "PROCESANDO PEDIDO..."
                 : paymentMethod === "CARD"
-                ? "CONFIRMAR Y PAGAR CON TARJETA"
-                : "CONFIRMAR PEDIDO CONTRA ENTREGA"}
+                ? `CONFIRMAR Y PAGAR (${formatPrice(total)})`
+                : `CONFIRMAR PEDIDO (${formatPrice(total)})`}
             </span>
           </button>
         </form>
@@ -275,21 +310,74 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
           <h2>TU PEDIDO</h2>
           <ul className="checkout-summary-list">
             {items.map((it) => (
-              <li key={it.cartId}>
+              <li key={it.cartId || it.product_variant_id}>
                 <span>{it.name} · {it.size} x{it.quantity}</span>
                 <span>{formatPrice(it.price * it.quantity)}</span>
               </li>
             ))}
           </ul>
 
+          {/* SECCIÓN DEL CUPÓN */}
+          <div style={{ margin: "1.25rem 0", borderTop: "1px solid #e2e8f0", paddingTop: "1rem" }}>
+            {appliedCoupon ? (
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "#f0fdf4", border: "1px solid #86efac", padding: "0.6rem 0.8rem", borderRadius: "6px" }}>
+                <div>
+                  <strong style={{ color: "#166534" }}>{appliedCoupon.code}</strong>
+                  <div style={{ fontSize: "0.85rem", color: "#15803d" }}>
+                    Descuento: -{formatPrice(appliedCoupon.discount_amount)}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRemoveCoupon}
+                  style={{ background: "none", border: "none", color: "#ef4444", fontWeight: 700, cursor: "pointer" }}
+                >
+                  ✕ Quitar
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  type="text"
+                  placeholder="Cupón de descuento"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  style={{ flex: 1, padding: "0.5rem 0.75rem", border: "1px solid #cbd5e1", borderRadius: "6px", textTransform: "uppercase" }}
+                />
+                <button
+                  type="button"
+                  onClick={handleApplyCoupon}
+                  disabled={couponLoading || !couponInput.trim()}
+                  style={{ padding: "0.5rem 1rem", background: "#0f172a", color: "#fff", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
+                >
+                  {couponLoading ? "..." : "Aplicar"}
+                </button>
+              </div>
+            )}
+            {couponError && (
+              <p style={{ color: "#dc2626", fontSize: "0.8rem", marginTop: "0.4rem" }}>
+                {couponError}
+              </p>
+            )}
+          </div>
+
           <div className="checkout-summary-row">
             <span>Subtotal</span>
             <span>{formatPrice(subtotal)}</span>
           </div>
+
+          {appliedCoupon && (
+            <div className="checkout-summary-row" style={{ color: "#16a34a" }}>
+              <span>Descuento cupón</span>
+              <span>-{formatPrice(appliedCoupon.discount_amount)}</span>
+            </div>
+          )}
+
           <div className="checkout-summary-row">
             <span>Envío</span>
             <span>{formatPrice(SHIPPING_COST)}</span>
           </div>
+
           <div className="checkout-summary-total">
             <span>TOTAL</span>
             <span>{formatPrice(total)}</span>

@@ -27,10 +27,15 @@ export const checkoutService = {
     return res.data?.data || res.data;
   },
 
-  // 4. Crear PaymentIntent en Stripe
-  async createPaymentIntent(cartId) {
-    console.log("[checkoutService] Creando PaymentIntent para cartId:", cartId);
-    const res = await api.post("/sales/checkout/intent", { cart_id: cartId });
+ // 4. Crear PaymentIntent en Stripe (con soporte de cupón)
+  async createPaymentIntent(cartId, couponCode = null) {
+    console.log("[checkoutService] Creando PaymentIntent para cartId:", cartId, "Cupón:", couponCode);
+    const payload = { cart_id: cartId };
+    if (couponCode) {
+      payload.coupon_code = couponCode;
+    }
+
+    const res = await api.post("/sales/checkout/intent", payload);
     console.log("[checkoutService] Respuesta PaymentIntent:", res.data);
     return res.data?.data || res.data;
   },

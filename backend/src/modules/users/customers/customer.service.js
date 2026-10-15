@@ -3,8 +3,37 @@ const userService = require("../accounts/user.service.js");
 
 const Customer = db.customer;
 const Address = db.address;
+const User = db.user;
 
-exports.getAll = () => Customer.findAll({ include: [db.user, Address] });
+exports.getAll = async () => {
+  const customers = await Customer.findAll({
+    include: [
+      {
+        model: User,
+        attributes: ["id", "email", "is_active", "is_guest", "created_at"],
+      },
+    ],
+    order: [["created_at", "DESC"]],
+  });
+
+  return customers.map((cInstance) => {
+    const c = cInstance.toJSON ? cInstance.toJSON() : cInstance;
+    const userObj = c.user || c.User;
+
+    return {
+      id: c.id,
+      user_id: c.user_id,
+      name: `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cliente",
+      email: userObj?.email || "—",
+      phone: c.phone || "—",
+      role: "customer",
+      totalOrders: 0, // o el conteo si incluyes el modelo Order
+      status: (userObj?.is_active ?? true) ? "Activo" : "Inactivo",
+      is_active: Boolean(userObj?.is_active ?? true),
+      created_at: c.created_at,
+    };
+  });
+};
 
 exports.getById = async (id) => {
   const customer = await Customer.findByPk(id, { include: [db.user, Address] });

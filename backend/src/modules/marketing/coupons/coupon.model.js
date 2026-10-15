@@ -11,10 +11,14 @@ module.exports = (sequelize, Sequelize) => {
     discount_type: {
       type: Sequelize.STRING(20),
       allowNull: false,
+      set(val) {
+        // Convierte siempre a MAYÚSCULAS antes de enviar a PostgreSQL
+        this.setDataValue("discount_type", String(val || "").toUpperCase());
+      },
       validate: {
         isIn: {
-          args: [["percentage", "fixed"]],
-          msg: "discount_type debe ser 'percentage' o 'fixed'."
+          args: [["PERCENTAGE", "FIXED", "percentage", "fixed"]],
+          msg: "discount_type debe ser 'PERCENTAGE' o 'FIXED'."
         }
       }
     },

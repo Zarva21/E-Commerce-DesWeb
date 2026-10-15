@@ -37,10 +37,12 @@ exports.validateCoupon = async (code, { subtotal, customerId, cartItems = [] } =
   const hasProductFilter = productIds.length > 0;
   const hasCategoryFilter = categoryIds.length > 0;
 
-  const calcDiscount = (base) =>
-    coupon.discount_type === "percentage"
-      ? Number((base * (Number(coupon.discount_value) / 100)).toFixed(2))
-      : Math.min(Number(coupon.discount_value), base); // "fixed" nunca descuenta más de lo que hay
+  const calcDiscount = (base) => {
+  const type = String(coupon.discount_type).toUpperCase();
+  return type === "PERCENTAGE"
+    ? Number((base * (Number(coupon.discount_value) / 100)).toFixed(2))
+    : Math.min(Number(coupon.discount_value), base);
+};
 
   // --- Caso COMBO: deben estar TODOS los productos listados, o no aplica ---
   if (coupon.is_bundle) {

@@ -1,7 +1,12 @@
 const db = require("../index.js");
 
-const Stock = db.stock;
+const Stock = db.stock; 
 const InventoryMovement = db.inventoryMovement;
+const ProductVariant = db.productVariant;
+const Product = db.product;
+const Brand = db.brand;
+const Category = db.category;
+const ProductImage = db.productImage;
 
 // Tipos de movimiento estandarizados 
 // siempre importa esta constante para evitar typos que rompan reportes/filtros después.
@@ -192,7 +197,62 @@ exports.getStockByVariant = async (product_variant_id) => {
   return stock;
 };
 
-exports.getAllStock = () => Stock.findAll();
+exports.getAllStock = async () => {
+  const stocks = await Stock.findAll({
+    include: [
+      {
+        model: ProductVariant,
+        attributes: ["id", "sku", "size", "color", "weight", "barcode", "is_active"],
+        include: [
+          {
+            model: Product,
+            attributes: ["id", "name", "cost_price", "sale_price"],
+            include: [
+              { model: Brand, attributes: ["id", "name"] },
+              { model: Category, attributes: ["id", "name"] },
+              { 
+                model: ProductImage, 
+                attributes: ["id", "image_url", "is_primary", "display_order"] 
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    order: [["product_variant_id", "ASC"]],
+  });
+
+  return stocks.map((sInstance) => {
+    const s = sInstance.toJSON ? sInstance.toJSON() : sInstance;
+    const variant = s.product_variant || s.ProductVariant;
+    const prod = variant?.product || variant?.Product;
+    const brand = prod?.brand || prod?.Brand;
+    const cat = prod?.category || prod?.Category;
+    const images = prod?.product_images || prod?.ProductImages || [];
+    
+    // Priorizar imagen primaria o la primera según display_order
+    const primaryImg =
+      images.find((img) => img.is_primary)?.image_url ||
+      images[0]?.image_url ||
+      "/img/placeholder.png";
+
+    return {
+      product_variant_id: Number(s.product_variant_id),
+      sku: variant?.sku || `SKU-${s.product_variant_id}`,
+      name: prod?.name
+        ? `${prod.name} (${variant?.size || "U"}${variant?.color ? " · " + variant.color : ""})`
+        : `Variante #${s.product_variant_id}`,
+      brand: brand?.name || "Sin marca",
+      category: cat?.name || "General",
+      gender: "General", // Placeholder para el front (al no existir columna en BD)
+      price: Number(prod?.sale_price || 0),
+      cost_price: Number(prod?.cost_price || 0),
+      image: primaryImg,
+      quantity_on_hand: Number(s.quantity_on_hand),
+      reorder_level: Number(s.reorder_level),
+    };
+  });
+};
 
 // Alertas de reabastecimiento: quantity_on_hand <= reorder_level
 exports.getLowStock = () =>

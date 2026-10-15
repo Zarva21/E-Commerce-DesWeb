@@ -13,7 +13,7 @@ const httpError = (message, status) => {
   return error;
 };
 
-const VALID_TYPES = ["percentage", "fixed"];
+const VALID_TYPES = ["PERCENTAGE", "FIXED", "percentage", "fixed"];
 
 /** Redondeo monetario a 2 decimales, evitando los errores de coma flotante. */
 const money = (value) => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
@@ -43,13 +43,17 @@ exports.create = async (data) => {
   } = data;
 
   if (!code) throw httpError("El código del cupón es obligatorio.", 400);
-  if (!VALID_TYPES.includes(discount_type)) {
-    throw httpError("discount_type debe ser 'percentage' o 'fixed'.", 400);
+
+  // Normalizar a mayúsculas para cumplir el CHECK de Postgres
+  const normalizedType = String(data.discount_type || "").toUpperCase();
+  if (!["PERCENTAGE", "FIXED"].includes(normalizedType)) {
+    throw httpError("discount_type debe ser 'PERCENTAGE' o 'FIXED'.", 400);
   }
+
   if (discount_value === undefined || Number(discount_value) <= 0) {
     throw httpError("discount_value debe ser mayor que cero.", 400);
   }
-  if (discount_type === "percentage" && Number(discount_value) > 100) {
+  if (normalizedType === "PERCENTAGE" && Number(discount_value) > 100) {
     throw httpError("Un descuento porcentual no puede ser mayor a 100.", 400);
   }
   if (!valid_from || !valid_to) {
@@ -57,9 +61,6 @@ exports.create = async (data) => {
   }
   if (new Date(valid_from) >= new Date(valid_to)) {
     throw httpError("valid_from debe ser anterior a valid_to.", 400);
-  }
-  if (max_uses !== undefined && max_uses !== null && Number(max_uses) < 1) {
-    throw httpError("max_uses debe ser al menos 1 (o null para ilimitado).", 400);
   }
 
   const normalizedCode = code.trim().toUpperCase();
@@ -69,7 +70,7 @@ exports.create = async (data) => {
   return Coupon.create({
     code: normalizedCode,
     description,
-    discount_type,
+    discount_type: normalizedType,
     discount_value,
     max_uses: max_uses ?? null,
     used_count: 0,

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PageHeader from "../ui/PageHeader";
 import StatusBadge from "../ui/StatusBadge";
+import { couponService } from "../../services/couponService";
 import { MOCK_OFFERS } from "./mockOffers";
 import "../ui/DataTable.css";
 import "./OffersPage.css";
@@ -13,18 +14,26 @@ const formatPrice = (value) =>
     minimumFractionDigits: 2,
   }).format(value);
 
-const formatDate = (value) =>
-  new Date(value).toLocaleDateString("es-GT", { day: "2-digit", month: "short", year: "numeric" });
+const formatDate = (value) => {
+  if (!value) return "—";
+  const d = new Date(value);
+  return isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleDateString("es-GT", { day: "2-digit", month: "short", year: "numeric" });
+};
 
 export default function OffersPage() {
-  const [offers, setOffers] = useState(MOCK_OFFERS);
+  const [offers, setOffers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [updatingId, setUpdatingId] = useState(null);
 
   // Formulario de creación
   const [formData, setFormData] = useState({
     code: "",
     description: "",
-    discount_type: "percentage",
+    discount_type: "PERCENTAGE",
     discount_value: "",
     max_uses: "",
     valid_from: "",
@@ -33,14 +42,38 @@ export default function OffersPage() {
 
   const [formError, setFormError] = useState("");
 
-  // Cambiar estado activo/inactivo
-  const toggleActive = (id) => {
-    // TODO API: PUT /api/coupons/:id enviando { is_active: !current }
-    setOffers((prev) =>
-      prev.map((offer) =>
-        offer.id === id ? { ...offer, is_active: !offer.is_active } : offer
-      )
-    );
+  const loadOffers = async () => {
+    setLoading(true);
+    try {
+      const data = await couponService.getAll();
+      setOffers(Array.isArray(data) && data.length > 0 ? data : MOCK_OFFERS);
+    } catch (err) {
+      console.warn("Fallo al conectar con la API de cupones, usando mock:", err);
+      setOffers(MOCK_OFFERS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadOffers();
+  }, []);
+
+  // Cambiar estado activo/inactivo directo en la BD
+  const toggleActive = async (offer) => {
+    setUpdatingId(offer.id);
+    const newStatus = !offer.is_active;
+
+    try {
+      await couponService.update(offer.id, { is_active: newStatus });
+      setOffers((prev) =>
+        prev.map((item) => (item.id === offer.id ? { ...item, is_active: newStatus } : item))
+      );
+    } catch (err) {
+      alert(err.response?.data?.message || "No se pudo actualizar el estado del cupón.");
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   const handleInputChange = (e) => {
@@ -48,11 +81,10 @@ export default function OffersPage() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleCreateCoupon = (e) => {
+  const handleCreateCoupon = async (e) => {
     e.preventDefault();
     setFormError("");
 
-    // Validaciones sincronizadas con las reglas de coupon.service.js
     if (!formData.code.trim()) {
       setFormError("El código del cupón es obligatorio.");
       return;
@@ -74,32 +106,37 @@ export default function OffersPage() {
       return;
     }
 
-    // Objeto listo para enviar a POST /api/coupons
-    const newCoupon = {
-      id: Date.now(),
-      code: formData.code.trim().toUpperCase(),
-      description: formData.description,
-      discount_type: formData.discount_type,
-      discount_value: Number(formData.discount_value),
-      max_uses: formData.max_uses ? Number(formData.max_uses) : null,
-      used_count: 0,
-      valid_from: new Date(formData.valid_from).toISOString(),
-      valid_to: new Date(formData.valid_to).toISOString(),
-      is_active: true,
-      customer_id: null,
-    };
+    setSubmitting(true);
+    try {
+      const payload = {
+        code: formData.code.trim().toUpperCase(),
+        description: formData.description || null,
+        discount_type: formData.discount_type,
+        discount_value: Number(formData.discount_value),
+        max_uses: formData.max_uses ? Number(formData.max_uses) : null,
+        valid_from: new Date(`${formData.valid_from}T00:00:00`).toISOString(),
+        valid_to: new Date(`${formData.valid_to}T23:59:59`).toISOString(),
+        is_active: true,
+      };
 
-    setOffers([newCoupon, ...offers]);
-    setIsModalOpen(false);
-    setFormData({
-      code: "",
-      description: "",
-      discount_type: "percentage",
-      discount_value: "",
-      max_uses: "",
-      valid_from: "",
-      valid_to: "",
-    });
+      await couponService.create(payload);
+
+      await loadOffers();
+      setIsModalOpen(false);
+      setFormData({
+        code: "",
+        description: "",
+        discount_type: "percentage",
+        discount_value: "",
+        max_uses: "",
+        valid_from: "",
+        valid_to: "",
+      });
+    } catch (err) {
+      setFormError(err.response?.data?.message || "Error al crear el cupón en el servidor.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -112,68 +149,81 @@ export default function OffersPage() {
       />
 
       <div className="data-card">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Código / Descripción</th>
-              <th>Descuento</th>
-              <th>Usos / Límite</th>
-              <th>Tipo</th>
-              <th>Vigencia</th>
-              <th>Estado</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {offers.map((offer) => (
-              <tr key={offer.id}>
-                <td>
-                  <div className="coupon-code-badge">{offer.code}</div>
-                  <div className="data-cell-muted offer-desc">{offer.description || "Sin descripción"}</div>
-                </td>
-                <td>
-                  <strong className="offer-discount-value">
-                    {offer.discount_type === "percentage"
-                      ? `${offer.discount_value}%`
-                      : formatPrice(offer.discount_value)}
-                  </strong>
-                </td>
-                <td>
-                  <span className="offer-uses">
-                    {offer.used_count} / {offer.max_uses !== null ? offer.max_uses : "∞"}
-                  </span>
-                </td>
-                <td>
-                  <span className={`coupon-type-tag ${offer.customer_id ? "type-credit" : "type-general"}`}>
-                    {offer.customer_id ? `Saldo a favor (ID #${offer.customer_id})` : "Público"}
-                  </span>
-                </td>
-                <td className="data-cell-muted">
-                  {formatDate(offer.valid_from)} – {formatDate(offer.valid_to)}
-                </td>
-                <td>
-                  <StatusBadge
-                    label={offer.is_active ? "Activo" : "Inactivo"}
-                    tone={offer.is_active ? "success" : "neutral"}
-                  />
-                </td>
-                <td>
-                  <div className="data-actions">
-                    <button
-                      type="button"
-                      className="data-action-btn"
-                      onClick={() => toggleActive(offer.id)}
-                    >
-                      {offer.is_active ? "Desactivar" : "Activar"}
-                    </button>
-                  </div>
-                </td>
+        {loading ? (
+          <p className="data-empty">Cargando cupones...</p>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Código / Descripción</th>
+                <th>Descuento</th>
+                <th>Usos / Límite</th>
+                <th>Tipo</th>
+                <th>Vigencia</th>
+                <th>Estado</th>
+                <th>Acciones</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {offers.map((offer) => (
+                <tr key={offer.id}>
+                  <td>
+                    <div className="coupon-code-badge">{offer.code}</div>
+                    <div className="data-cell-muted offer-desc">
+                      {offer.description || "Sin descripción"}
+                    </div>
+                  </td>
+                  <td>
+                    <strong className="offer-discount-value">
+                      {String(offer.discount_type).toUpperCase() === "PERCENTAGE"
+                        ? `${Number(offer.discount_value)}%`
+                        : formatPrice(offer.discount_value)}
+                    </strong>
+                  </td>
+                  <td>
+                    <span className="offer-uses">
+                      {offer.used_count || 0} / {offer.max_uses !== null && offer.max_uses !== undefined ? offer.max_uses : "∞"}
+                    </span>
+                  </td>
+                  <td>
+                    <span className={`coupon-type-tag ${offer.customer_id ? "type-credit" : "type-general"}`}>
+                      {offer.customer_id ? `Saldo a favor (ID #${offer.customer_id})` : "Público"}
+                    </span>
+                  </td>
+                  <td className="data-cell-muted">
+                    {formatDate(offer.valid_from)} – {formatDate(offer.valid_to)}
+                  </td>
+                  <td>
+                    <StatusBadge
+                      label={offer.is_active ? "Activo" : "Inactivo"}
+                      tone={offer.is_active ? "success" : "neutral"}
+                    />
+                  </td>
+                  <td>
+                    <div className="data-actions">
+                      <button
+                        type="button"
+                        disabled={updatingId === offer.id}
+                        className="data-action-btn"
+                        onClick={() => toggleActive(offer)}
+                      >
+                        {updatingId === offer.id
+                          ? "..."
+                          : offer.is_active
+                          ? "Desactivar"
+                          : "Activar"}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
 
-        {offers.length === 0 && <p className="data-empty">Todavía no hay cupones creados.</p>}
+        {!loading && offers.length === 0 && (
+          <p className="data-empty">Todavía no hay cupones creados en la base de datos.</p>
+        )}
       </div>
 
       {/* MODAL CREAR CUPÓN */}
@@ -221,8 +271,8 @@ export default function OffersPage() {
                     value={formData.discount_type}
                     onChange={handleInputChange}
                   >
-                    <option value="percentage">Porcentaje (%)</option>
-                    <option value="fixed">Monto Fijo (Q)</option>
+                    <option value="PERCENTAGE">Porcentaje (%)</option>
+                    <option value="FIXED">Monto Fijo (Q)</option>
                   </select>
                 </div>
 
@@ -279,12 +329,13 @@ export default function OffersPage() {
                 <button
                   type="button"
                   className="btn-secondary"
+                  disabled={submitting}
                   onClick={() => setIsModalOpen(false)}
                 >
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Guardar Cupón
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  {submitting ? "Guardando..." : "Guardar Cupón"}
                 </button>
               </div>
             </form>

@@ -138,13 +138,19 @@ const resolveAuthenticatedIdentity = async ({ userId, addressId, guestData }, tr
 };
 
 exports.createIntent = async ({ cartId, couponCode, userId }) => {
+    // 1. Resolver el customerId antes de computeTotals para soportar Store Credit
   let resolvedCustomerId = null;
   if (userId) {
     const customer = await Customer.findOne({ where: { user_id: userId } });
-    resolvedCustomerId = customer ? customer.id : null;
+    if (customer) resolvedCustomerId = customer.id;
   }
 
-  const { subtotal, discount, tax, total } = await computeTotals(cartId, couponCode, resolvedCustomerId);
+  // 2. Pasar resolvedCustomerId a computeTotals
+  const { cart, subtotal, discount, tax, total, appliedCoupon } = await computeTotals(
+    cartId,
+    couponCode,
+    resolvedCustomerId
+  );
 
   const paymentIntent = await stripe.paymentIntents.create({
     amount: Math.round(total * 100),

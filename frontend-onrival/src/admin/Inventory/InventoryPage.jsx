@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import PageHeader from "../ui/PageHeader";
 import StatusBadge from "../ui/StatusBadge";
+import { inventoryService } from "../../services/inventoryService";
 import { MOCK_INVENTORY, MOCK_MOVEMENTS } from "./mockInventory";
 import "../ui/DataTable.css";
 import "./InventoryPage.css";
@@ -12,13 +13,18 @@ const formatPrice = (value) =>
     minimumFractionDigits: 2,
   }).format(value);
 
-const formatDate = (value) =>
-  new Date(value).toLocaleDateString("es-GT", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+const formatDate = (value) => {
+  if (!value) return "Reciente";
+  const d = new Date(value);
+  return isNaN(d.getTime())
+    ? "Reciente"
+    : d.toLocaleDateString("es-GT", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+};
 
 function stockBadge(quantityOnHand, reorderLevel) {
   if (quantityOnHand === 0) return <StatusBadge label="Agotado" tone="danger" />;
@@ -29,12 +35,13 @@ function stockBadge(quantityOnHand, reorderLevel) {
 // canAddProduct: puede crear productos nuevos desde el inventario (solo admin).
 // Sin permiso sigue pudiendo ajustar stock y ver el historial.
 export default function InventoryPage({ canAddProduct = true }) {
-  const [inventory, setInventory] = useState(MOCK_INVENTORY);
-  const [movements, setMovements] = useState(MOCK_MOVEMENTS);
-  const [activeTab, setActiveTab] = useState("stock"); // 'stock' | 'movements'
+  const [inventory, setInventory] = useState([]);
+  const [movements, setMovements] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("stock");
 
-  // Estado para el modal de ajuste de inventario
   const [selectedVariant, setSelectedVariant] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
   const [movementForm, setMovementForm] = useState({
     movement_type: "PURCHASE_IN",
     quantity: "",
@@ -43,11 +50,27 @@ export default function InventoryPage({ canAddProduct = true }) {
   });
   const [errorMsg, setErrorMsg] = useState("");
 
-  const handleCreateProduct = () => {
-    if (!canAddProduct) return;
-    // TODO: abrir el formulario de nuevo producto
-    console.log("Crear producto");
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [stockData, movData] = await Promise.all([
+        inventoryService.getStock(),
+        inventoryService.getMovements(),
+      ]);
+      setInventory(Array.isArray(stockData) && stockData.length > 0 ? stockData : MOCK_INVENTORY);
+      setMovements(Array.isArray(movData) && movData.length > 0 ? movData : MOCK_MOVEMENTS);
+    } catch (err) {
+      console.warn("Fallo al obtener inventario real, usando fallback:", err);
+      setInventory(MOCK_INVENTORY);
+      setMovements(MOCK_MOVEMENTS);
+    } finally {
+      setLoading(false);
+    }
   };
+
+  useEffect(() => {
+    loadData();
+  }, []);
 
   const handleOpenAdjustModal = (item) => {
     setSelectedVariant(item);
@@ -60,7 +83,7 @@ export default function InventoryPage({ canAddProduct = true }) {
     setErrorMsg("");
   };
 
-  const handleSaveMovement = (e) => {
+  const handleSaveMovement = async (e) => {
     e.preventDefault();
     setErrorMsg("");
 
@@ -71,38 +94,28 @@ export default function InventoryPage({ canAddProduct = true }) {
     }
 
     const isOutgoing = ["DAMAGE_OUT", "SUPPLIER_RETURN_OUT"].includes(movementForm.movement_type);
-
-    // Validación de stock mínimo para salidas
     if (isOutgoing && selectedVariant.quantity_on_hand < qty) {
       setErrorMsg(`Stock insuficiente. Solo hay ${selectedVariant.quantity_on_hand} unidades disponibles.`);
       return;
     }
 
-    const delta = isOutgoing ? -qty : qty;
+    setSubmitting(true);
+    try {
+      await inventoryService.recordMovement({
+        product_variant_id: selectedVariant.product_variant_id,
+        movement_type: movementForm.movement_type,
+        quantity: qty,
+        reference: movementForm.reference || undefined,
+        notes: movementForm.notes || undefined,
+      });
 
-    // Actualización local de stock (simulando la respuesta de recordMovement)
-    setInventory((prev) =>
-      prev.map((item) =>
-        item.product_variant_id === selectedVariant.product_variant_id
-          ? { ...item, quantity_on_hand: item.quantity_on_hand + delta }
-          : item
-      )
-    );
-
-    // Registrar en el historial de movimientos
-    const newMovement = {
-      id: Date.now(),
-      product_variant_id: selectedVariant.product_variant_id,
-      employee_id: 1, // Simulación de sesión actual
-      movement_type: movementForm.movement_type,
-      quantity: delta,
-      reference: movementForm.reference || (movementForm.movement_type === "PURCHASE_IN" ? "COMPRA-MANUAL" : "AJUSTE-MANUAL"),
-      notes: movementForm.notes,
-      createdAt: new Date().toISOString(),
-    };
-
-    setMovements([newMovement, ...movements]);
-    setSelectedVariant(null);
+      await loadData();
+      setSelectedVariant(null);
+    } catch (err) {
+      setErrorMsg(err.response?.data?.message || err.message || "Error al aplicar el movimiento.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -110,132 +123,134 @@ export default function InventoryPage({ canAddProduct = true }) {
       <PageHeader
         title="Gestión de Inventario"
         subtitle="Control de existencias y movimientos por variante"
-        actionLabel={canAddProduct ? "Nuevo Producto" : null}
-        onAction={canAddProduct ? handleCreateProduct : null}
       />
 
-      {/* Tabs de Navegación */}
       <div className="inventory-tabs">
         <button
           type="button"
           className={`tab-btn ${activeTab === "stock" ? "active" : ""}`}
           onClick={() => setActiveTab("stock")}
         >
-          Existencias (Stock)
+          Existencias ({inventory.length})
         </button>
         <button
           type="button"
           className={`tab-btn ${activeTab === "movements" ? "active" : ""}`}
           onClick={() => setActiveTab("movements")}
         >
-          Historial de Movimientos
+          Historial de Movimientos ({movements.length})
         </button>
       </div>
 
-      {/* TAB 1: TABLA DE STOCK */}
-      {activeTab === "stock" && (
-        <div className="data-card">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Producto / SKU</th>
-                <th>Marca / Cat.</th>
-                <th>Precio</th>
-                <th>Stock Actual</th>
-                <th>Nivel Reorden</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inventory.map((item) => (
-                <tr key={item.product_variant_id}>
-                  <td>
-                    <div className="data-cell-main">
-                      <div className="data-cell-thumb">
-                        <img src={item.image} alt={item.name} />
-                      </div>
-                      <div>
-                        <span className="data-cell-title">{item.name}</span>
-                        <div className="data-cell-muted">SKU: {item.sku}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <div>{item.brand}</div>
-                    <span className="data-cell-muted">{item.category} ({item.gender})</span>
-                  </td>
-                  <td>{formatPrice(item.price)}</td>
-                  <td>
-                    <strong className="stock-qty">{item.quantity_on_hand}</strong> unid.
-                  </td>
-                  <td>{item.reorder_level} unid.</td>
-                  <td>{stockBadge(item.quantity_on_hand, item.reorder_level)}</td>
-                  <td>
-                    <div className="data-actions">
-                      <button
-                        type="button"
-                        className="data-action-btn"
-                        onClick={() => handleOpenAdjustModal(item)}
-                      >
-                        Ajustar Stock
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {loading ? (
+        <p className="data-empty">Cargando datos de almacén...</p>
+      ) : (
+        <>
+          {activeTab === "stock" && (
+            <div className="data-card">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Producto / SKU</th>
+                    <th>Marca / Cat.</th>
+                    <th>Precio</th>
+                    <th>Stock Actual</th>
+                    <th>Nivel Reorden</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inventory.map((item) => (
+                    <tr key={item.product_variant_id}>
+                      <td>
+                        <div className="data-cell-main">
+                          <div className="data-cell-thumb">
+                            <img src={item.image || "/img/placeholder.png"} alt={item.name} />
+                          </div>
+                          <div>
+                            <span className="data-cell-title">{item.name}</span>
+                            <div className="data-cell-muted">SKU: {item.sku}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <div>{item.brand}</div>
+                        <span className="data-cell-muted">
+                          {item.category} ({item.gender})
+                        </span>
+                      </td>
+                      <td>{formatPrice(item.price)}</td>
+                      <td>
+                        <strong className="stock-qty">{item.quantity_on_hand}</strong> unid.
+                      </td>
+                      <td>{item.reorder_level} unid.</td>
+                      <td>{stockBadge(item.quantity_on_hand, item.reorder_level)}</td>
+                      <td>
+                        <div className="data-actions">
+                          <button
+                            type="button"
+                            className="data-action-btn"
+                            onClick={() => handleOpenAdjustModal(item)}
+                          >
+                            Ajustar Stock
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-          {inventory.length === 0 && (
-            <p className="data-empty">No hay productos ni variantes registradas.</p>
+              {inventory.length === 0 && (
+                <p className="data-empty">No hay productos ni variantes registradas.</p>
+              )}
+            </div>
           )}
-        </div>
+
+          {activeTab === "movements" && (
+            <div className="data-card">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>ID Variante</th>
+                    <th>Tipo Movimiento</th>
+                    <th>Cantidad</th>
+                    <th>Referencia</th>
+                    <th>Notas</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {movements.map((mov) => (
+                    <tr key={mov.id}>
+                      <td className="data-cell-muted">{formatDate(mov.created_at || mov.createdAt)}</td>
+                      <td>#{mov.product_variant_id}</td>
+                      <td>
+                        <span className={`movement-tag tag-${String(mov.movement_type).toLowerCase()}`}>
+                          {mov.movement_type}
+                        </span>
+                      </td>
+                      <td>
+                        <strong className={Number(mov.quantity) > 0 ? "qty-plus" : "qty-minus"}>
+                          {Number(mov.quantity) > 0 ? `+${mov.quantity}` : mov.quantity}
+                        </strong>
+                      </td>
+                      <td>{mov.reference || "-"}</td>
+                      <td className="data-cell-muted">{mov.notes || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {movements.length === 0 && (
+                <p className="data-empty">No hay movimientos registrados.</p>
+              )}
+            </div>
+          )}
+        </>
       )}
 
-      {/* TAB 2: HISTORIAL DE MOVIMIENTOS */}
-      {activeTab === "movements" && (
-        <div className="data-card">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Fecha</th>
-                <th>ID Variante</th>
-                <th>Tipo Movimiento</th>
-                <th>Cantidad</th>
-                <th>Referencia</th>
-                <th>Notas</th>
-              </tr>
-            </thead>
-            <tbody>
-              {movements.map((mov) => (
-                <tr key={mov.id}>
-                  <td className="data-cell-muted">{formatDate(mov.createdAt)}</td>
-                  <td>#{mov.product_variant_id}</td>
-                  <td>
-                    <span className={`movement-tag tag-${mov.movement_type.toLowerCase()}`}>
-                      {mov.movement_type}
-                    </span>
-                  </td>
-                  <td>
-                    <strong className={mov.quantity > 0 ? "qty-plus" : "qty-minus"}>
-                      {mov.quantity > 0 ? `+${mov.quantity}` : mov.quantity}
-                    </strong>
-                  </td>
-                  <td>{mov.reference || "-"}</td>
-                  <td className="data-cell-muted">{mov.notes || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          {movements.length === 0 && (
-            <p className="data-empty">No hay movimientos registrados.</p>
-          )}
-        </div>
-      )}
-
-      {/* MODAL PARA REGISTRAR MOVIMIENTO MANUAL */}
       {selectedVariant && (
         <div className="inventory-modal-overlay" onClick={() => setSelectedVariant(null)}>
           <div className="inventory-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -294,11 +309,16 @@ export default function InventoryPage({ canAddProduct = true }) {
               </div>
 
               <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={() => setSelectedVariant(null)}>
+                <button
+                  type="button"
+                  className="btn-secondary"
+                  disabled={submitting}
+                  onClick={() => setSelectedVariant(null)}
+                >
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Aplicar Movimiento
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  {submitting ? "Aplicando..." : "Aplicar Movimiento"}
                 </button>
               </div>
             </form>
