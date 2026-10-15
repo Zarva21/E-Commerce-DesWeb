@@ -11,7 +11,10 @@ const NAV_ITEMS = [
   { id: "destacados", label: "Destacados" },
 ];
 
-export default function Sidebar({ activeView, onSelectView, onExitAdmin }) {
+export default function Sidebar({ activeView, onSelectView, onExitAdmin, allowedViews }) {
+  // Sin lista de permisos se muestran todas; con lista, solo las permitidas
+  const items = allowedViews ? NAV_ITEMS.filter((item) => allowedViews.includes(item.id)) : NAV_ITEMS;
+
   return (
     <aside className="sidebar">
       <div className="sidebar-logo">
@@ -19,7 +22,7 @@ export default function Sidebar({ activeView, onSelectView, onExitAdmin }) {
       </div>
 
       <nav className="sidebar-nav">
-        {NAV_ITEMS.map((item) => (
+        {items.map((item) => (
           <button
             key={item.id}
             type="button"

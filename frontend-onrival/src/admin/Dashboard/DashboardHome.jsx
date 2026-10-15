@@ -21,8 +21,10 @@ const MOCK_MONTHLY_SALES = [
   { month: "Septiembre 2026", ordersCount: 28, totalAmount: 34120.0 },
 ];
 
-export default function DashboardHome({ onNavigate }) {
-  // Sincronización con modelos actualizados del backend/MOCKs:
+// showSalesStats: muestra "Ventas mensuales" y "Productos más vendidos" (solo admin).
+// allowedViews: secciones a las que el rol puede entrar; las tarjetas que llevan
+// a otra sección no se muestran. Sin esta lista se muestran todas.
+export default function DashboardHome({ onNavigate, showSalesStats = true, allowedViews }) {
   const pendingOrders = MOCK_ORDERS.filter((o) => o.status === "Pendiente").length;
   const activeOffers = MOCK_OFFERS.filter((o) => o.is_active ?? o.active).length;
   const activeEmployees = MOCK_EMPLOYEES.filter(
@@ -38,7 +40,7 @@ export default function DashboardHome({ onNavigate }) {
     (item) => item.quantity_on_hand > item.reorder_level
   ).length;
 
-  const stats = [
+  const allStats = [
     {
       id: "inventario",
       label: "Total Ítems / Stock Bajo",
@@ -64,6 +66,9 @@ export default function DashboardHome({ onNavigate }) {
       hint: "Ver ofertas →",
     },
   ];
+
+  // Solo tarjetas cuya sección destino está permitida para este rol
+  const stats = allowedViews ? allStats.filter((s) => allowedViews.includes(s.id)) : allStats;
 
   // Datos simulados para Productos Más Vendidos
   const topSellingProducts = [
@@ -94,63 +99,67 @@ export default function DashboardHome({ onNavigate }) {
         ))}
       </div>
 
-      {/* REPORTE 1: VENTAS MENSUALES */}
-      <div className="dashboard-card dashboard-section">
-        <div className="dashboard-card-head">
-          <div>
-            <h3>Ventas Mensuales Realizadas</h3>
-            <p className="dashboard-subtitle">Histórico consolidado de ingresos por mes</p>
-          </div>
-          <button type="button" className="dashboard-card-link" onClick={() => onNavigate("pedidos")}>
-            Ver detalle de pedidos
-          </button>
-        </div>
-
-        <div className="monthly-sales-chart">
-          {MOCK_MONTHLY_SALES.map((item) => {
-            const barHeightPercentage = Math.round((item.totalAmount / maxMonthlySales) * 100);
-            return (
-              <div key={item.month} className="monthly-sales-col">
-                <span className="monthly-sales-val">{formatPrice(item.totalAmount)}</span>
-                <div className="bar-container">
-                  <div
-                    className="bar-fill"
-                    style={{ height: `${barHeightPercentage}%` }}
-                    title={`${item.ordersCount} pedidos`}
-                  />
-                </div>
-                <span className="monthly-sales-label">{item.month}</span>
-                <span className="monthly-sales-sub">{item.ordersCount} ped.</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* GRID DE REPORTE DE PRODUCTOS MÁS VENDIDOS Y ESTADO DE EXISTENCIAS */}
-      <div className="dashboard-grid">
-        {/* REPORTE 2: PRODUCTOS MÁS VENDIDOS */}
-        <div className="dashboard-card">
+      {/* REPORTE 1: VENTAS MENSUALES (solo con permiso) */}
+      {showSalesStats && (
+        <div className="dashboard-card dashboard-section">
           <div className="dashboard-card-head">
-            <h3>Productos Más Vendidos</h3>
-            <button type="button" className="dashboard-card-link" onClick={() => onNavigate("catalogo")}>
-              Ir al catálogo
+            <div>
+              <h3>Ventas Mensuales Realizadas</h3>
+              <p className="dashboard-subtitle">Histórico consolidado de ingresos por mes</p>
+            </div>
+            <button type="button" className="dashboard-card-link" onClick={() => onNavigate("pedidos")}>
+              Ver detalle de pedidos
             </button>
           </div>
 
-          <ul className="dashboard-ranking-list">
-            {topSellingProducts.map((prod, index) => (
-              <li key={prod.id}>
-                <span className={`ranking-badge rank-${index + 1}`}>{index + 1}</span>
-                <div className="ranking-details">
-                  <span className="ranking-name">{prod.name}</span>
-                  <span className="ranking-brand">{prod.brand} • {prod.salesCount} uds. vendidas</span>
+          <div className="monthly-sales-chart">
+            {MOCK_MONTHLY_SALES.map((item) => {
+              const barHeightPercentage = Math.round((item.totalAmount / maxMonthlySales) * 100);
+              return (
+                <div key={item.month} className="monthly-sales-col">
+                  <span className="monthly-sales-val">{formatPrice(item.totalAmount)}</span>
+                  <div className="bar-container">
+                    <div
+                      className="bar-fill"
+                      style={{ height: `${barHeightPercentage}%` }}
+                      title={`${item.ordersCount} pedidos`}
+                    />
+                  </div>
+                  <span className="monthly-sales-label">{item.month}</span>
+                  <span className="monthly-sales-sub">{item.ordersCount} ped.</span>
                 </div>
-                <span className="ranking-revenue">{formatPrice(prod.revenue)}</span>
-              </li>
-            ))}
-          </ul>
+              );
+            })}
+          </div>
         </div>
+      )}
+
+      {/* GRID DE REPORTE DE PRODUCTOS MÁS VENDIDOS Y ESTADO DE EXISTENCIAS */}
+      <div className={`dashboard-grid ${showSalesStats ? "" : "dashboard-grid-single"}`}>
+        {/* REPORTE 2: PRODUCTOS MÁS VENDIDOS (solo con permiso) */}
+        {showSalesStats && (
+          <div className="dashboard-card">
+            <div className="dashboard-card-head">
+              <h3>Productos Más Vendidos</h3>
+              <button type="button" className="dashboard-card-link" onClick={() => onNavigate("catalogo")}>
+                Ir al catálogo
+              </button>
+            </div>
+
+            <ul className="dashboard-ranking-list">
+              {topSellingProducts.map((prod, index) => (
+                <li key={prod.id}>
+                  <span className={`ranking-badge rank-${index + 1}`}>{index + 1}</span>
+                  <div className="ranking-details">
+                    <span className="ranking-name">{prod.name}</span>
+                    <span className="ranking-brand">{prod.brand} • {prod.salesCount} uds. vendidas</span>
+                  </div>
+                  <span className="ranking-revenue">{formatPrice(prod.revenue)}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {/* REPORTE 3: ESTADO DE EXISTENCIAS */}
         <div className="dashboard-card">

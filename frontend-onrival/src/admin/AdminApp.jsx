@@ -8,34 +8,61 @@ import OrdersPage from "./Orders/OrdersPage";
 import OrderDetail from "./Orders/OrderDetail";
 import OffersPage from "./Offers/OffersPage";
 import HeroSlidesPage from "./Destacados/HeroSlidesPage";
+import { getPermissions } from "./permissions";
 
-// Todo lo del panel de admin vive acá adentro, como un "sub-app" propio.
-// Se monta desde App.jsx cuando el usuario logueado tiene rol "admin".
-export default function AdminApp({ onExitAdmin }) {
+// Panel compartido por admin y empleado: los permisos del rol deciden
+// qué secciones aparecen y qué acciones están habilitadas.
+// Se monta desde App.jsx cuando el usuario logueado tiene rol "admin" o "empleado".
+export default function AdminApp({ role = "empleado", onExitAdmin }) {
+  const permissions = getPermissions(role);
+
   const [view, setView] = useState("dashboard");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
+  // Si la vista actual no está permitida para este rol, se cae al panel general
+  const currentView = permissions.views.includes(view) ? view : "dashboard";
+
   const handleSelectView = (nextView) => {
+    if (!permissions.views.includes(nextView)) return;
     setSelectedOrderId(null);
     setView(nextView);
   };
 
   return (
-    <AdminLayout activeView={view} onSelectView={handleSelectView} onExitAdmin={onExitAdmin}>
-      {view === "dashboard" && <DashboardHome onNavigate={handleSelectView} />}
-      {view === "catalogo" && <CatalogPage />}
-      {view === "inventario" && <InventoryPage />}
-      {view === "usuarios" && <EmployeesPage />}
+    <AdminLayout
+      activeView={currentView}
+      onSelectView={handleSelectView}
+      onExitAdmin={onExitAdmin}
+      allowedViews={permissions.views}
+      userLabel={permissions.label}
+    >
+      {currentView === "dashboard" && (
+        <DashboardHome
+          onNavigate={handleSelectView}
+          showSalesStats={permissions.canSeeSalesStats}
+          allowedViews={permissions.views}
+        />
+      )}
 
-      {view === "pedidos" &&
+      {currentView === "catalogo" && (
+        <CatalogPage canCreate={permissions.canCreateProduct} canToggle={permissions.canToggleProduct} />
+      )}
+
+      {currentView === "inventario" && (
+        <InventoryPage canAddProduct={permissions.canAddInventoryProduct} />
+      )}
+
+      {currentView === "usuarios" && <EmployeesPage canSeeEmployees={permissions.canSeeEmployees} />}
+
+      {currentView === "pedidos" &&
         (selectedOrderId ? (
           <OrderDetail orderId={selectedOrderId} onBack={() => setSelectedOrderId(null)} />
         ) : (
           <OrdersPage onSelectOrder={setSelectedOrderId} />
         ))}
 
-      {view === "ofertas" && <OffersPage />}
-      {view === "destacados" && <HeroSlidesPage />}
+      {currentView === "ofertas" && <OffersPage />}
+      {currentView === "destacados" && <HeroSlidesPage />}
     </AdminLayout>
   );
 }

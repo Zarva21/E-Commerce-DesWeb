@@ -2,7 +2,7 @@ import { useState } from "react";
 import PageHeader from "../ui/PageHeader";
 import StatusBadge from "../ui/StatusBadge";
 import { useHeroSlides } from "../../context/HeroSlidesContext";
-import { MOCK_PRODUCTS } from "../../components/Catalog/mockProducts";
+import { MOCK_PRODUCTS, MOCK_BRANDS, MOCK_CATEGORIES, MOCK_SUPPLIERS } from "../Catalog/mockCatalog";
 import "../ui/DataTable.css";
 import "../Catalog/CatalogPage.css";
 import "./HeroSlidesPage.css";

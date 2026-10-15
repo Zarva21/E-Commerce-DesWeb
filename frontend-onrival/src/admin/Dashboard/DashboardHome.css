@@ -394,3 +394,5 @@
     overflow-x: auto;
   }
 }
+
+.dashboard-grid.dashboard-grid-single { grid-template-columns: 1fr; }

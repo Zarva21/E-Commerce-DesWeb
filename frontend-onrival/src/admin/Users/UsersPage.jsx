@@ -5,9 +5,10 @@ import { MOCK_EMPLOYEES, MOCK_CLIENTS } from "./mockUsers";
 import "../ui/DataTable.css";
 import "./UsersPage.css";
 
-export default function UsersPage() {
-  // Pestaña activa: "employees" | "clients"
-  const [activeTab, setActiveTab] = useState("employees");
+export default function UsersPage({ canSeeEmployees = true }) {
+  // Pestaña activa: "employees" | "clients" (sin permiso, solo existe "clients")
+  const [activeTab, setActiveTab] = useState(canSeeEmployees ? "employees" : "clients");
+  const tab = canSeeEmployees ? activeTab : "clients";
 
   // TODO API: Reemplazar MOCK_EMPLOYEES y MOCK_CLIENTS por las respuestas de tu backend
   const employees = MOCK_EMPLOYEES;
@@ -18,13 +19,13 @@ export default function UsersPage() {
       <PageHeader
         title="Usuarios"
         subtitle={
-          activeTab === "employees"
+          tab === "employees"
             ? "Gestión de colaboradores y accesos al panel"
             : "Directorio de clientes registrados en la tienda"
         }
-        actionLabel={activeTab === "employees" ? "Agregar empleado" : undefined}
+        actionLabel={tab === "employees" ? "Agregar empleado" : undefined}
         onAction={
-          activeTab === "employees"
+          tab === "employees"
             ? () => {
                 // TODO: Abrir modal o vista de registro de nuevo empleado
                 console.log("Agregar nuevo empleado");
@@ -35,24 +36,26 @@ export default function UsersPage() {
 
       {/* Control de Pestañas Superior */}
       <div className="users-tabs-bar">
+        {canSeeEmployees && (
+          <button
+            type="button"
+            className={`users-tab-btn ${tab === "employees" ? "users-tab-active" : ""}`}
+            onClick={() => setActiveTab("employees")}
+          >
+            Empleados ({employees.length})
+          </button>
+        )}
         <button
           type="button"
-          className={`users-tab-btn ${activeTab === "employees" ? "users-tab-active" : ""}`}
-          onClick={() => setActiveTab("employees")}
-        >
-          Empleados ({employees.length})
-        </button>
-        <button
-          type="button"
-          className={`users-tab-btn ${activeTab === "clients" ? "users-tab-active" : ""}`}
+          className={`users-tab-btn ${tab === "clients" ? "users-tab-active" : ""}`}
           onClick={() => setActiveTab("clients")}
         >
           Clientes Registrados ({clients.length})
         </button>
       </div>
 
-      {/* TABLA 1: EMPLEADOS */}
-      {activeTab === "employees" && (
+      {/* TABLA 1: EMPLEADOS (solo con permiso) */}
+      {canSeeEmployees && tab === "employees" && (
         <div className="data-card">
           <table className="data-table">
             <thead>
@@ -105,7 +108,7 @@ export default function UsersPage() {
       )}
 
       {/* TABLA 2: CLIENTES */}
-      {activeTab === "clients" && (
+      {tab === "clients" && (
         <div className="data-card">
           <table className="data-table">
             <thead>
