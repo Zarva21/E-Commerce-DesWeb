@@ -29,11 +29,11 @@ const httpError = (message, status) => {
  * necesita saber QUÉ productos/categorías hay en el carrito para poder
  * filtrar cupones por producto, categoría, o combo.
  */
-const computeTotals = async (cartId, couponCode, customerId) => {
+const computeTotals = async (cartId, couponCode, customerId, shippingCost = 35) => {
   const cart = await cartService.getCartWithTotals(cartId);
   if (!cart.items.length) throw httpError("El carrito está vacío.", 400);
 
-  const subtotal = cart.subtotal;
+  const subtotal = Number(cart.subtotal);
   let discount = 0;
   let appliedCoupon = null;
 
@@ -41,17 +41,26 @@ const computeTotals = async (cartId, couponCode, customerId) => {
     const result = await marketingService.validateCoupon(couponCode, {
       subtotal,
       customerId,
-      cartItems: cart.items // <-- antes no se mandaba
+      cartItems: cart.items
     });
-    if (!result) throw httpError("El cupón no es válido, expiró, o no aplica a los productos de tu carrito.", 400);
+    if (!result) throw httpError("El cupón no es válido, expiró o no aplica a estos productos.", 400);
     appliedCoupon = result;
-    discount = result.discount_amount;
+    discount = Number(result.discount_amount);
   }
 
-  const tax = 0; // TODO: aplicar regla fiscal real
-  const total = Number((subtotal - discount + tax).toFixed(2));
+  // Base gravable tras aplicar descuento
+  const taxableBase = Math.max(0, subtotal - discount);
 
-  return { cart, subtotal, discount, tax, total, appliedCoupon };
+  // IVA (12%) sobre la base gravable
+  const tax = Number((taxableBase * 0.12).toFixed(2));
+
+  // Costo de envío (Q35 por defecto si no es especificado)
+  const shipping = Number(Number(shippingCost).toFixed(2));
+
+  // Total final de la orden
+  const total = Number((taxableBase + tax + shipping).toFixed(2));
+
+  return { cart, subtotal, discount, tax, shipping_cost: shipping, total, appliedCoupon };
 };
 
 const resolveGuestIdentity = async ({ email, firstName, lastName, phone, address }, transaction) => {
@@ -137,27 +146,31 @@ const resolveAuthenticatedIdentity = async ({ userId, addressId, guestData }, tr
   return { customer, address };
 };
 
-exports.createIntent = async ({ cartId, couponCode, userId }) => {
-    // 1. Resolver el customerId antes de computeTotals para soportar Store Credit
+exports.createIntent = async ({ cartId, couponCode, userId, shippingCost = 35 }) => {
+  const activeCouponCode =
+    typeof couponCode === "string" && couponCode.trim() !== ""
+      ? couponCode.trim().toUpperCase()
+      : null;
+
   let resolvedCustomerId = null;
   if (userId) {
     const customer = await Customer.findOne({ where: { user_id: userId } });
     if (customer) resolvedCustomerId = customer.id;
   }
 
-  // 2. Pasar resolvedCustomerId a computeTotals
-  const { cart, subtotal, discount, tax, total, appliedCoupon } = await computeTotals(
+  const { cart, subtotal, discount, tax, shipping_cost, total } = await computeTotals(
     cartId,
-    couponCode,
-    resolvedCustomerId
+    activeCouponCode,
+    resolvedCustomerId,
+    shippingCost
   );
 
   const paymentIntent = await stripe.paymentIntents.create({
-    amount: Math.round(total * 100),
+    amount: Math.round(total * 100), // Monto exacto en centavos (ej: Q135.00 -> 13500)
     currency: "usd",
     metadata: {
       cart_id: String(cartId),
-      coupon_code: couponCode || "",
+      coupon_code: activeCouponCode || "",
       customer_id: resolvedCustomerId ? String(resolvedCustomerId) : ""
     }
   });
@@ -168,6 +181,7 @@ exports.createIntent = async ({ cartId, couponCode, userId }) => {
     subtotal,
     discount,
     tax,
+    shipping_cost,
     total
   };
 };
@@ -175,18 +189,32 @@ exports.createIntent = async ({ cartId, couponCode, userId }) => {
 exports.confirmCheckout = async ({
   cartId,
   paymentMethod,
-  stripePaymentIntentId,
   paymentMethodId,
+  stripePaymentIntentId,
   couponCode,
   addressId,
   guestData,
   userId,
   employeeId = null,
+  shippingCost = 35
 }) => {
-  const { cart, subtotal, discount, tax, total, appliedCoupon } = await computeTotals(
+  const activeCouponCode =
+    typeof couponCode === "string" && couponCode.trim() !== ""
+      ? couponCode.trim().toUpperCase()
+      : null;
+
+  let resolvedCustomerId = null;
+  if (userId) {
+    const customer = await Customer.findOne({ where: { user_id: userId } });
+    if (customer) resolvedCustomerId = customer.id;
+  }
+
+  // 1. Recalcular montos reales con IVA y Envío
+  const { cart, subtotal, discount, tax, shipping_cost, total, appliedCoupon } = await computeTotals(
     cartId,
-    couponCode,
-    null
+    activeCouponCode,
+    resolvedCustomerId,
+    shippingCost
   );
 
   if (paymentMethod === "CASH" && total > businessConfig.payment.maxCashLimit) {
@@ -240,24 +268,14 @@ if (paymentMethod === "CARD") {
 }
 
   const t = await db.sequelize.transaction();
-
   try {
     const { customer, address } = userId
-      ? await resolveAuthenticatedIdentity({ userId, addressId, guestData }, t) 
-      : await resolveGuestIdentity(
-          {
-            email: guestData.email,
-            firstName: guestData.first_name,
-            lastName: guestData.last_name,
-            phone: guestData.phone,
-            address: guestData.address,
-          },
-          t
-        );
+      ? await resolveAuthenticatedIdentity({ userId, addressId, guestData }, t)
+      : await resolveGuestIdentity(guestData, t);
 
-    // Vincular el carrito anónimo al cliente resuelto antes de cerrarlo
     await cartService.attachCustomerToCart(cartId, customer.id, t);
 
+    // 2. Crear la orden con subtotal, tax, shipping_cost y total reales
     const order = await Order.create(
       {
         customer_id: customer.id,
@@ -266,7 +284,7 @@ if (paymentMethod === "CARD") {
         status: paymentMethod === "CASH" ? "pending_payment" : "paid",
         subtotal,
         tax,
-        shipping_cost: 0,
+        shipping_cost,
         discount,
         total,
       },
@@ -359,4 +377,7 @@ if (paymentMethod === "CARD") {
 
     throw err;
   }
+  
+
+  
 };

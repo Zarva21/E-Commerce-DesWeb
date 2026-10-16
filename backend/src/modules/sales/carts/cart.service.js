@@ -130,3 +130,32 @@ exports.convertAndAssignCart = async (cartId, customerId, transaction) => {
     { where: { id: cartId }, transaction }
   );
 };
+
+exports.clearCartItems = async (cartId) => {
+  const deletedCount = await CartItem.destroy({
+    where: { cart_id: cartId }
+  });
+  return deletedCount;
+};
+
+exports.syncCartItems = async (cartId, items = []) => {
+  return db.sequelize.transaction(async (t) => {
+    // 1. Limpiar todos los ítems actuales del carrito
+    await CartItem.destroy({
+      where: { cart_id: cartId },
+      transaction: t,
+      force: true // Para borrar físico y no acumular duplicados
+    });
+
+    // 2. Insertar exactamente lo que tiene el usuario en pantalla
+    for (const item of items) {
+      await CartItem.create({
+        cart_id: cartId,
+        product_variant_id: item.product_variant_id || item.variantId || item.id,
+        quantity: item.quantity
+      }, { transaction: t });
+    }
+
+    return true;
+  });
+};

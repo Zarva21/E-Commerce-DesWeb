@@ -87,7 +87,7 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
           const cartRes = await checkoutService.getCustomerCart(authUser.customer_id);
           cartId = cartRes.id || cartRes.cart_id;
         } catch (err) {
-          console.warn("Fallo al obtener carrito previo, creando uno nuevo:", err);
+          console.warn("Fallo al obtener carrito previo:", err);
         }
       }
 
@@ -96,10 +96,15 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
         cartId = guestCart.id || guestCart.cart_id;
       }
 
-      // Sincronizar ítems en el carrito de la BD
-      for (const item of items) {
-        await checkoutService.addItemToCart(cartId, item.product_variant_id, item.quantity);
+      // 1. SOLUCIÓN AL DUPLICADO: Limpiar ítems previos antes de poblar con el estado del front
+      try {
+        await checkoutService.clearCartItems(cartId);
+      } catch (e) {
+        // Si no existe el endpoint, continuamos
       }
+
+      // 2. Insertar los ítems actuales exactos del carrito
+      await checkoutService.syncCart(cartId, items);
 
       let stripePaymentIntentId = null;
 
@@ -113,7 +118,8 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
 
         const intentRes = await checkoutService.createPaymentIntent(
           cartId,
-          appliedCoupon?.code || null
+          appliedCoupon?.code || null,
+          SHIPPING_COST
         );
         const { client_secret, payment_intent_id } = intentRes;
 
@@ -140,29 +146,50 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
       }
 
       // Payload para confirmCheckout
+      // 1. Identificar si tenemos una dirección guardada válida
       const hasSavedAddress =
         shippingData.address_id !== null &&
         shippingData.address_id !== undefined &&
-        !isNaN(Number(shippingData.address_id));
+        !isNaN(Number(shippingData.address_id)) &&
+        Number(shippingData.address_id) > 0;
 
-      const isRegisteredUser = Boolean(authUser?.customer_id && hasSavedAddress);
-
-      let confirmPayload = {
-        cart_id: cartId,
+      // 2. Armar el payload base limpio
+      const confirmPayload = {
+        cart_id: Number(cartId), // 👈 Asegurar que sea entero
         payment_method: paymentMethod,
-        coupon_code: appliedCoupon ? appliedCoupon.code : null, // 👈 Se envía el cupón
       };
 
+      // 3. Cupón: solo agregarlo si realmente está aplicado
+      if (appliedCoupon && appliedCoupon.code) {
+        confirmPayload.coupon_code = appliedCoupon.code.trim().toUpperCase();
+      }
+
+      // 4. Pago con tarjeta
       if (paymentMethod === "CARD") {
         confirmPayload.stripe_payment_intent_id = stripePaymentIntentId;
       }
 
-      if (isRegisteredUser) {
+      // 5. address_id vs guest_data (Cumpliendo estrictamente con el .xor de Joi)
+      if (authUser?.customer_id && hasSavedAddress) {
+        // Caso Usuario Registrado con dirección guardada: SOLO address_id
         confirmPayload.address_id = Number(shippingData.address_id);
       } else {
-        const [firstName, ...restName] = (shippingData.nombre || "").trim().split(" ");
+        // Caso Invitado o Usuario que ingresó dirección manual: SOLO guest_data
+        const fullName = (shippingData.nombre || "").trim();
+        const firstSpaceIndex = fullName.indexOf(" ");
+
+        let firstName = "Cliente";
+        let lastName = "General";
+
+        if (firstSpaceIndex !== -1) {
+          firstName = fullName.substring(0, firstSpaceIndex).trim();
+          lastName = fullName.substring(firstSpaceIndex + 1).trim() || "General";
+        } else if (fullName) {
+          firstName = fullName;
+        }
+
         const guestAddress = {
-          country: "GT",
+          country: shippingData.country || "GT",
           city: shippingData.ciudad || "Guatemala",
           address_line1: shippingData.direccion || "Ciudad de Guatemala",
         };
@@ -171,11 +198,18 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
           guestAddress.address_line2 = shippingData.direccion2.trim();
         }
 
+        if (shippingData.departamento && shippingData.departamento.trim().length > 0) {
+          guestAddress.state = shippingData.departamento.trim();
+        }
+
+        if (shippingData.codigo_postal) {
+          guestAddress.postal_code = String(shippingData.codigo_postal);
+        }
+
         confirmPayload.guest_data = {
           email: shippingData.email,
-          first_name: firstName || "Cliente",
-          last_name: restName.join(" ") || "General",
-          phone: shippingData.telefono || "00000000",
+          first_name: firstName,
+          last_name: lastName,
           address: guestAddress,
         };
       }

@@ -27,26 +27,58 @@ export const checkoutService = {
     return res.data?.data || res.data;
   },
 
- // 4. Crear PaymentIntent en Stripe (con soporte de cupón)
-  async createPaymentIntent(cartId, couponCode = null) {
-    console.log("[checkoutService] Creando PaymentIntent para cartId:", cartId, "Cupón:", couponCode);
-    const payload = { cart_id: cartId };
-    if (couponCode) {
-      payload.coupon_code = couponCode;
+ // Limpiar carrito antes de reinsertar (evita acumulación si rebota la tarjeta)
+  async clearCartItems(cartId) {
+    const res = await api.delete(`/sales/carts/${cartId}/items`);
+    return res.data;
+  },
+
+  // 4. Crear PaymentIntent considerando cupón y envío
+  async createPaymentIntent(cartId, couponCode = null, shippingCost = 0) {
+    const payload = { 
+      cart_id: Number(cartId),
+      shipping_cost: Number(shippingCost)
+    };
+    if (couponCode && couponCode.trim()) {
+      payload.coupon_code = couponCode.trim().toUpperCase();
     }
 
     const res = await api.post("/sales/checkout/intent", payload);
-    console.log("[checkoutService] Respuesta PaymentIntent:", res.data);
     return res.data?.data || res.data;
   },
 
   // 5. Confirmar checkout y cerrar orden
   async confirmCheckout(payload) {
-    console.log("[checkoutService] Enviando confirmCheckout con payload:", payload);
-    const res = await api.post("/sales/checkout/confirm", payload);
-    console.log("[checkoutService] Orden confirmada exitosamente:", res.data);
-    return res.data?.data || res.data;
-  },
+  // Limpiar payload: no enviar coupon_code si viene null, undefined o string vacío
+  const cleanPayload = { ...payload };
+
+  if (!cleanPayload.coupon_code || !cleanPayload.coupon_code.trim()) {
+    delete cleanPayload.coupon_code;
+  } else {
+    cleanPayload.coupon_code = cleanPayload.coupon_code.trim().toUpperCase();
+  }
+
+  // Si no es compra como invitado, omitir guest_data si va vacío
+  if (cleanPayload.guest_data && Object.keys(cleanPayload.guest_data).length === 0) {
+    delete cleanPayload.guest_data;
+  }
+
+  console.log("[checkoutService] Enviando confirmCheckout saneado:", cleanPayload);
+  const res = await api.post("/sales/checkout/confirm", cleanPayload);
+  return res.data?.data || res.data;
+},
+
+async syncCart(cartId, items) {
+  console.log(`[checkoutService] Sincronizando carrito ${cartId} con ítems:`, items);
+  const res = await api.put(`/sales/carts/${cartId}/sync`, {
+    items: items.map((i) => ({
+      product_variant_id: i.product_variant_id || i.id,
+      quantity: i.quantity,
+    })),
+  });
+  return res.data?.data || res.data;
+},
+
 };
 
 

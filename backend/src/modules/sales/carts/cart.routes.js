@@ -9,4 +9,7 @@ router.post("/:cartId/items", cart.addItem);
 router.put("/:cartId/items/:itemId", cart.updateItem);
 router.delete("/:cartId/items/:itemId", cart.removeItem);
 
+router.delete("/carts/:cartId/items", cart.clearCartItems);
+router.put("/:cartId/sync", cart.syncCart);
+
 module.exports = router;

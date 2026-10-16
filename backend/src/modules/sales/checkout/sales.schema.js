@@ -19,7 +19,7 @@ const guestDataSchema = Joi.object({
 // ---- POST /sales/checkout/intent ----
 const checkoutIntentSchema = Joi.object({
   cart_id: Joi.number().integer().required(),
-  coupon_code: Joi.string().trim().uppercase().optional()
+  coupon_code: Joi.string().trim().uppercase().allow(null, "").optional()
 });
 
 // ---- POST /sales/checkout/confirm ----
@@ -30,15 +30,13 @@ const checkoutConfirmSchema = Joi.object({
   stripe_payment_intent_id: Joi.string().when("payment_method", {
     is: "CARD",
     then: Joi.required(),
-    otherwise: Joi.optional()
+    otherwise: Joi.optional().allow(null, "")
   }),
 
-  coupon_code: Joi.string().trim().uppercase().optional(),
+  coupon_code: Joi.string().trim().uppercase().allow(null, "").optional(),
 
-  // Exactamente UNA de las dos: cliente logueado manda address_id,
-  // invitado manda guest_data completo (True Shadow User).
-  address_id: Joi.number().integer(),
-  guest_data: guestDataSchema
+  address_id: Joi.number().integer().optional(),
+  guest_data: guestDataSchema.optional()
 })
   .xor("address_id", "guest_data")
   .messages({

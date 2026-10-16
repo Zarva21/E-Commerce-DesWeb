@@ -56,3 +56,37 @@ exports.removeItem = async (req, res) => {
     res.status(err.status || 500).send({ message: err.message });
   }
 };
+
+exports.clearCartItems = async (req, res) => {
+  try {
+    const { cartId } = req.params;
+
+    if (!cartId) {
+      return res.status(400).send({ message: "El cartId es requerido." });
+    }
+
+    await cartService.clearCartItems(cartId);
+
+    return res.status(200).send({
+      message: "Ítems del carrito eliminados exitosamente."
+    });
+  } catch (err) {
+    return res.status(err.status || 500).send({
+      message: err.message || "Error al vaciar los ítems del carrito."
+    });
+  }
+};
+
+exports.syncCart = async (req, res) => {
+  try {
+    const { cartId } = req.params;
+    const { items } = req.body;
+
+    await cartService.syncCartItems(cartId, items || []);
+
+    const updatedCart = await cartService.getCartWithTotals(cartId);
+    res.status(200).send({ data: updatedCart });
+  } catch (err) {
+    res.status(err.status || 500).send({ message: err.message });
+  }
+};
