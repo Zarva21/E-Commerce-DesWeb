@@ -7,6 +7,7 @@ const catalogRoutes = require("./modules/catalog/catalog.routes");
 const salesRoutes = require("./modules/sales/sales.routes");
 const inventoryRoutes = require("./modules/inventory/inventory.routes");
 const marketingRoutes = require("./modules/marketing/marketing.routes");
+const mediaRoutes = require("./modules/media/media.routes");
 // const systemRoutes = require("./modules/system/system.routes");
 
 const errorHandler = require("./middlewares/error.middleware.js");
@@ -37,6 +38,7 @@ app.use(`${API_PREFIX}/catalog`, catalogRoutes);
 app.use(`${API_PREFIX}/sales`, salesRoutes);
 app.use(`${API_PREFIX}/inventory`, inventoryRoutes);
 app.use(`${API_PREFIX}/marketing`, marketingRoutes);
+app.use(`${API_PREFIX}/media`, mediaRoutes);
 //app.use(`${API_PREFIX}/system`, systemRoutes);
 
 // 4. Catch-all para rutas que no existen (404)

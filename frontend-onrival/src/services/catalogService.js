@@ -66,36 +66,105 @@ export function adaptProduct(item) {
   };
 }
 
+// Adaptador para el Panel Administrativo (conserva campos de costos y relaciones)
+export function adaptAdminProduct(item) {
+  const rawImages = item.product_images || item.images || [];
+  const rawVariants = item.product_variants || item.variants || [];
+
+  return {
+    id: item.id,
+    public_id: item.public_id || `PROD-${item.id}`,
+    name: item.name,
+    description: item.description || "",
+    cost_price: Number(item.cost_price || 0),
+    sale_price: Number(item.sale_price || 0),
+    brand_id: item.brand_id,
+    category_id: item.category_id,
+    supplier_id: item.supplier_id,
+    is_active: item.is_active ?? true,
+    brand: item.brand || null,
+    category: item.category || null,
+    supplier: item.supplier || null,
+    images: rawImages.map((img) => ({
+      id: img.id,
+      image_url: img.image_url,
+      is_primary: img.is_primary ?? false,
+    })),
+    variants: rawVariants.map((v) => ({
+      id: v.id,
+      sku: v.sku,
+      color: v.color || "",
+      size: v.size || "",
+      weight: v.weight || "",
+      barcode: v.barcode || "",
+      is_active: v.is_active ?? true,
+      stock: v.stock || null,
+    })),
+  };
+}
+
 export const catalogService = {
-  // Obtener todos los productos activos
+  // --- CONSULTAS PÚBLICAS (TIENDA) ---
   async getProducts() {
     const res = await api.get("/catalog/products");
-    // res.data.data contiene el arreglo de productos según tu backend
     const items = res.data?.data || (Array.isArray(res.data) ? res.data : []);
     return items.map(adaptProduct);
   },
 
-  // Alias para componentes que llamen getAll()
   async getAll() {
     return this.getProducts();
   },
 
-  // Obtener el detalle completo de un producto por ID
   async getProductById(id) {
     const res = await api.get(`/catalog/products/${id}`);
-    // Si viene en { data: { ... } } o directo
     const item = res.data?.data || res.data;
     return adaptProduct(item);
   },
 
-  // Alias getById
   async getById(id) {
     return this.getProductById(id);
   },
 
-  // Categorías
+  // --- CONSULTAS Y ACCIONES ADMINISTRATIVAS ---
+  async getAdminProducts() {
+    const res = await api.get("/catalog/products?all=true");
+    const items = res.data?.data || (Array.isArray(res.data) ? res.data : []);
+    return items.map(adaptAdminProduct);
+  },
+
+  async createProduct(productData) {
+    const res = await api.post("/catalog/products", productData);
+    return res.data?.data || res.data;
+  },
+
+  async updateProduct(id, productData) {
+    const res = await api.put(`/catalog/products/${id}`, productData);
+    return res.data?.data || res.data;
+  },
+
+  async toggleProductStatus(id) {
+    const res = await api.patch(`/catalog/products/${id}/status`);
+    return res.data?.data || res.data;
+  },
+
+  async addVariant(productId, variantData) {
+    const res = await api.post(`/catalog/products/${productId}/variants`, variantData);
+    return res.data?.data || res.data;
+  },
+
+  // --- CATÁLOGOS BASE ---
   async getCategories() {
     const res = await api.get("/catalog/categories");
+    return res.data?.data || (Array.isArray(res.data) ? res.data : []);
+  },
+
+  async getBrands() {
+    const res = await api.get("/catalog/brands");
+    return res.data?.data || (Array.isArray(res.data) ? res.data : []);
+  },
+
+  async getSuppliers() {
+    const res = await api.get("/catalog/suppliers");
     return res.data?.data || (Array.isArray(res.data) ? res.data : []);
   },
 };

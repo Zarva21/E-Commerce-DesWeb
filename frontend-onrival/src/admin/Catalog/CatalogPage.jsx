@@ -1,14 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageHeader from "../ui/PageHeader";
 import StatusBadge from "../ui/StatusBadge";
 import CategoryCascader from "./CategoryCascader";
 import { buildCategoryTree, categoryPathLabel } from "./categoryTree";
-import {
-  MOCK_PRODUCTS,
-  MOCK_BRANDS,
-  MOCK_CATEGORIES,
-  MOCK_SUPPLIERS,
-} from "./mockCatalog";
+import { catalogService } from "../../services/catalogService";
+import { mediaService } from "../../services/mediaService";
 import "../ui/DataTable.css";
 import "./CatalogPage.css";
 
@@ -34,29 +30,25 @@ const PlusIcon = () => (
   </svg>
 );
 
-// canCreate: puede crear productos nuevos. canToggle: puede activar/desactivar productos.
-// Con ambos en false (rol empleado) solo puede editar.
 export default function CatalogPage({ canCreate = true, canToggle = true }) {
-  const [activeTab, setActiveTab] = useState("products"); // 'products' | 'brands' | 'categories' | 'suppliers'
+  const [activeTab, setActiveTab] = useState("products");
 
-  // Estados de datos
-  const [products, setProducts] = useState(MOCK_PRODUCTS);
-  const [brands] = useState(MOCK_BRANDS);
-  const [categories] = useState(MOCK_CATEGORIES);
-  const [suppliers] = useState(MOCK_SUPPLIERS);
-
-  // Árbol de categorías para el menú en cascada.
-  // TODO: con backend, esto viene de getTree() y ya no se arma acá.
-  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
-  const categoryLabel = (id) => categoryPathLabel(categoryTree, id) || "Sin categoría";
+  // Estados de datos (inician vacíos, se llenan desde PostgreSQL)
+  const [products, setProducts] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   // Filtro
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modales
-  const [selectedProduct, setSelectedProduct] = useState(null); // null = cerrado
+  const [selectedProduct, setSelectedProduct] = useState(null);
   const [isCreatingProduct, setIsCreatingProduct] = useState(false);
   const [editingVariantProduct, setEditingVariantProduct] = useState(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [modalError, setModalError] = useState("");
 
   // Formulario de producto
   const [productForm, setProductForm] = useState({
@@ -70,6 +62,10 @@ export default function CatalogPage({ canCreate = true, canToggle = true }) {
     is_active: true,
   });
 
+  // Manejo de archivos para AWS S3
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [filePreviews, setFilePreviews] = useState([]);
+
   // Formulario de variante
   const [variantForm, setVariantForm] = useState({
     sku: "",
@@ -79,51 +75,61 @@ export default function CatalogPage({ canCreate = true, canToggle = true }) {
     barcode: "",
   });
 
-  // Manejo de estado activo/inactivo de producto
-  const handleToggleProductStatus = (id) => {
-    if (!canToggle) return;
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, is_active: !p.is_active } : p))
-    );
+  // 1. Cargar datos del backend
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [prods, brs, cats, sups] = await Promise.all([
+        catalogService.getAdminProducts(),
+        catalogService.getBrands(),
+        catalogService.getCategories(),
+        catalogService.getSuppliers(),
+      ]);
+
+      setProducts(prods);
+      setBrands(brs);
+      setCategories(cats);
+      setSuppliers(sups);
+    } catch (err) {
+      console.error("Error al cargar datos del catálogo:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Guardar nuevo producto o edición
-  const handleSaveProduct = (e) => {
-    e.preventDefault();
+  useEffect(() => {
+    loadData();
+  }, []);
 
-    const data = {
-      ...productForm,
-      cost_price: Number(productForm.cost_price),
-      sale_price: Number(productForm.sale_price),
-      brand_id: toId(productForm.brand_id),
-      category_id: toId(productForm.category_id),
-      supplier_id: toId(productForm.supplier_id),
-    };
-    const related = {
-      brand: brands.find((b) => b.id === data.brand_id),
-      category: categories.find((c) => c.id === data.category_id),
-      supplier: suppliers.find((s) => s.id === data.supplier_id),
-    };
+  const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
+  const categoryLabel = (id) => categoryPathLabel(categoryTree, id) || "Sin categoría";
 
-    if (selectedProduct) {
-      // Editar
+  // 2. Activar / Desactivar producto en BD
+  const handleToggleProductStatus = async (id) => {
+    if (!canToggle) return;
+    try {
+      await catalogService.toggleProductStatus(id);
       setProducts((prev) =>
-        prev.map((p) => (p.id === selectedProduct.id ? { ...p, ...data, ...related } : p))
+        prev.map((p) => (p.id === id ? { ...p, is_active: !p.is_active } : p))
       );
-    } else {
-      // Crear
-      if (!canCreate) return;
-      const newProd = {
-        id: Date.now(),
-        public_id: crypto.randomUUID(),
-        ...data,
-        ...related,
-        variants: [],
-        images: [],
-      };
-      setProducts([newProd, ...products]);
+    } catch (err) {
+      alert(err.response?.data?.message || "No se pudo actualizar el estado del producto.");
     }
-    closeProductModal();
+  };
+
+  // 3. Manejo de archivos seleccionados
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    if (files.length > 5) {
+      alert("Puedes seleccionar un máximo de 5 fotografías.");
+      return;
+    }
+
+    setSelectedFiles(files);
+    const previews = files.map((f) => URL.createObjectURL(f));
+    setFilePreviews(previews);
   };
 
   const openCreateModal = () => {
@@ -139,6 +145,9 @@ export default function CatalogPage({ canCreate = true, canToggle = true }) {
       supplier_id: suppliers[0]?.id || "",
       is_active: true,
     });
+    setSelectedFiles([]);
+    setFilePreviews([]);
+    setModalError("");
     setIsCreatingProduct(true);
   };
 
@@ -154,45 +163,104 @@ export default function CatalogPage({ canCreate = true, canToggle = true }) {
       supplier_id: product.supplier_id || "",
       is_active: product.is_active,
     });
+    setSelectedFiles([]);
+    setFilePreviews([]);
+    setModalError("");
     setIsCreatingProduct(true);
   };
 
   const closeProductModal = () => {
     setIsCreatingProduct(false);
     setSelectedProduct(null);
+    setSelectedFiles([]);
+    setFilePreviews([]);
+    setModalError("");
   };
 
-  // Agregar variante
-  const handleAddVariant = (e) => {
+  // 4. Guardar producto y subir fotos a S3
+  const handleSaveProduct = async (e) => {
     e.preventDefault();
-    if (!variantForm.sku) return;
+    setModalError("");
 
-    const newVariant = {
-      id: Date.now(),
-      ...variantForm,
-      is_active: true,
+    const payload = {
+      name: productForm.name.trim(),
+      description: productForm.description.trim(),
+      cost_price: Number(productForm.cost_price),
+      sale_price: Number(productForm.sale_price),
+      brand_id: toId(productForm.brand_id),
+      category_id: toId(productForm.category_id),
+      supplier_id: toId(productForm.supplier_id),
+      is_active: productForm.is_active,
     };
 
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === editingVariantProduct.id
-          ? { ...p, variants: [...p.variants, newVariant] }
-          : p
-      )
-    );
+    if (payload.sale_price <= 0) {
+      setModalError("El precio de venta debe ser mayor a 0.");
+      return;
+    }
 
-    setEditingVariantProduct((prev) => ({
-      ...prev,
-      variants: [...prev.variants, newVariant],
-    }));
+    setSubmitting(true);
+    try {
+      let savedProduct;
 
-    setVariantForm({ sku: "", color: "", size: "", weight: "", barcode: "" });
+      if (selectedProduct) {
+        savedProduct = await catalogService.updateProduct(selectedProduct.id, payload);
+      } else {
+        savedProduct = await catalogService.createProduct(payload);
+      }
+
+      const targetId = savedProduct?.id || selectedProduct?.id;
+
+      // Subir fotos a S3 si el usuario seleccionó archivos
+      if (selectedFiles.length > 0 && targetId) {
+        await mediaService.uploadProductImages(targetId, selectedFiles, true);
+      }
+
+      await loadData();
+      closeProductModal();
+    } catch (err) {
+      setModalError(err.response?.data?.message || err.message || "Error al procesar el producto.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // 5. Agregar variante en BD
+  const handleAddVariant = async (e) => {
+    e.preventDefault();
+    if (!variantForm.sku.trim()) return;
+
+    try {
+      const newVar = await catalogService.addVariant(editingVariantProduct.id, {
+        sku: variantForm.sku.trim().toUpperCase(),
+        color: variantForm.color.trim() || null,
+        size: variantForm.size.trim() || null,
+        weight: variantForm.weight ? Number(variantForm.weight) : null,
+        barcode: variantForm.barcode.trim() || null,
+      });
+
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === editingVariantProduct.id
+            ? { ...p, variants: [...(p.variants || []), newVar] }
+            : p
+        )
+      );
+
+      setEditingVariantProduct((prev) => ({
+        ...prev,
+        variants: [...(prev.variants || []), newVar],
+      }));
+
+      setVariantForm({ sku: "", color: "", size: "", weight: "", barcode: "" });
+    } catch (err) {
+      alert(err.response?.data?.message || "Error al crear la variante.");
+    }
   };
 
   const filteredProducts = products.filter(
     (p) =>
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.brand?.name.toLowerCase().includes(searchQuery.toLowerCase())
+      p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      p.brand?.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -236,191 +304,202 @@ export default function CatalogPage({ canCreate = true, canToggle = true }) {
         </button>
       </div>
 
-      {/* TAB 1: PRODUCTOS */}
-      {activeTab === "products" && (
+      {loading ? (
         <div className="data-card">
-          <div className="catalog-filter-bar">
-            <input
-              type="text"
-              placeholder="Buscar por nombre o marca..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="catalog-search-input"
-            />
-          </div>
+          <p className="data-empty">Cargando catálogo desde la base de datos...</p>
+        </div>
+      ) : (
+        <>
+          {/* TAB 1: PRODUCTOS */}
+          {activeTab === "products" && (
+            <div className="data-card">
+              <div className="catalog-filter-bar">
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre o marca..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="catalog-search-input"
+                />
+              </div>
 
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Producto</th>
-                <th>Marca / Cat.</th>
-                <th>P. Costo</th>
-                <th>P. Venta</th>
-                <th>Variantes</th>
-                <th>Estado</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProducts.map((item) => {
-                const variantCount = item.variants.length;
-                const variantSizes = item.variants.map((v) => v.size).filter(Boolean).join(", ");
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Producto</th>
+                    <th>Marca / Cat.</th>
+                    <th>P. Costo</th>
+                    <th>P. Venta</th>
+                    <th>Variantes</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProducts.map((item) => {
+                    const variantList = item.variants || [];
+                    const variantCount = variantList.length;
+                    const variantSizes = variantList.map((v) => v.size).filter(Boolean).join(", ");
+                    const primaryImg =
+                      item.images?.find((i) => i.is_primary)?.image_url ||
+                      item.images?.[0]?.image_url ||
+                      "/img/placeholder.png";
 
-                return (
-                  <tr key={item.id}>
-                    <td>
-                      <div className="data-cell-main">
-                        <div className="data-cell-thumb">
-                          <img
-                            src={item.images[0]?.image_url || "/img/placeholder.png"}
-                            alt={item.name}
-                          />
-                        </div>
-                        <div>
-                          <span className="data-cell-title">{item.name}</span>
-                          <div className="data-cell-muted">ID: {item.public_id.slice(0, 8)}...</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <div>{item.brand?.name || "Sin marca"}</div>
-                      <span className="data-cell-muted">{categoryLabel(item.category_id)}</span>
-                    </td>
-                    <td>{formatPrice(item.cost_price)}</td>
-                    <td><strong>{formatPrice(item.sale_price)}</strong></td>
-                    <td>
-                      <button
-                        type="button"
-                        className={`variant-btn ${variantCount === 0 ? "variant-btn-empty" : ""}`}
-                        onClick={() => setEditingVariantProduct(item)}
-                        title={
-                          variantCount === 0
-                            ? "Este producto aún no tiene variantes"
-                            : `Tallas: ${variantSizes || "sin talla definida"}`
-                        }
-                        aria-label={`Gestionar variantes de ${item.name}`}
-                      >
-                        {variantCount === 0 ? <PlusIcon /> : <VariantIcon />}
-                        <span>
-                          {variantCount === 0
-                            ? "Agregar"
-                            : `${variantCount} ${variantCount === 1 ? "variante" : "variantes"}`}
-                        </span>
-                      </button>
-                    </td>
-                    <td>
-                      <StatusBadge
-                        label={item.is_active ? "Activo" : "Inactivo"}
-                        tone={item.is_active ? "success" : "muted"}
-                      />
-                    </td>
-                    <td>
-                      <div className="data-actions">
-                        <button
-                          type="button"
-                          className="data-action-btn"
-                          onClick={() => openEditModal(item)}
-                        >
-                          Editar
-                        </button>
-                        {canToggle && (
+                    return (
+                      <tr key={item.id}>
+                        <td>
+                          <div className="data-cell-main">
+                            <div className="data-cell-thumb">
+                              <img src={primaryImg} alt={item.name} />
+                            </div>
+                            <div>
+                              <span className="data-cell-title">{item.name}</span>
+                              <div className="data-cell-muted">
+                                ID: {item.public_id ? item.public_id.slice(0, 8) + "..." : `#${item.id}`}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td>
+                          <div>{item.brand?.name || "Sin marca"}</div>
+                          <span className="data-cell-muted">{categoryLabel(item.category_id)}</span>
+                        </td>
+                        <td>{formatPrice(item.cost_price || 0)}</td>
+                        <td><strong>{formatPrice(item.sale_price)}</strong></td>
+                        <td>
                           <button
                             type="button"
-                            className="data-action-btn"
-                            onClick={() => handleToggleProductStatus(item.id)}
+                            className={`variant-btn ${variantCount === 0 ? "variant-btn-empty" : ""}`}
+                            onClick={() => setEditingVariantProduct(item)}
+                            title={
+                              variantCount === 0
+                                ? "Este producto aún no tiene variantes"
+                                : `Tallas: ${variantSizes || "sin talla definida"}`
+                            }
                           >
-                            {item.is_active ? "Desactivar" : "Activar"}
+                            {variantCount === 0 ? <PlusIcon /> : <VariantIcon />}
+                            <span>
+                              {variantCount === 0
+                                ? "Agregar"
+                                : `${variantCount} ${variantCount === 1 ? "variante" : "variantes"}`}
+                            </span>
                           </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        </td>
+                        <td>
+                          <StatusBadge
+                            label={item.is_active ? "Activo" : "Inactivo"}
+                            tone={item.is_active ? "success" : "muted"}
+                          />
+                        </td>
+                        <td>
+                          <div className="data-actions">
+                            <button
+                              type="button"
+                              className="data-action-btn"
+                              onClick={() => openEditModal(item)}
+                            >
+                              Editar
+                            </button>
+                            {canToggle && (
+                              <button
+                                type="button"
+                                className="data-action-btn"
+                                onClick={() => handleToggleProductStatus(item.id)}
+                              >
+                                {item.is_active ? "Desactivar" : "Activar"}
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
 
-          {filteredProducts.length === 0 && (
-            <p className="data-empty">No se encontraron productos en el catálogo.</p>
+              {filteredProducts.length === 0 && (
+                <p className="data-empty">No hay productos en la base de datos.</p>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
-      {/* TAB 2: MARCAS */}
-      {activeTab === "brands" && (
-        <div className="data-card">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nombre</th>
-                <th>Descripción</th>
-              </tr>
-            </thead>
-            <tbody>
-              {brands.map((brand) => (
-                <tr key={brand.id}>
-                  <td>#{brand.id}</td>
-                  <td><strong>{brand.name}</strong></td>
-                  <td className="data-cell-muted">{brand.description || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* TAB 3: CATEGORÍAS */}
-      {activeTab === "categories" && (
-        <div className="data-card">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Categoría</th>
-                <th>Depende de (Padre)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {categories.map((cat) => {
-                const parent = categories.find((c) => c.id === cat.parent_category_id);
-                return (
-                  <tr key={cat.id}>
-                    <td>#{cat.id}</td>
-                    <td><strong>{cat.name}</strong></td>
-                    <td className="data-cell-muted">{parent ? parent.name : "— (Categoría Principal)"}</td>
+          {/* TAB 2: MARCAS */}
+          {activeTab === "brands" && (
+            <div className="data-card">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nombre</th>
+                    <th>Descripción</th>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                </thead>
+                <tbody>
+                  {brands.map((b) => (
+                    <tr key={b.id}>
+                      <td>#{b.id}</td>
+                      <td><strong>{b.name}</strong></td>
+                      <td className="data-cell-muted">{b.description || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-      {/* TAB 4: PROVEEDORES */}
-      {activeTab === "suppliers" && (
-        <div className="data-card">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Nombre Proveedor</th>
-                <th>Correo Electrónico</th>
-                <th>Teléfono</th>
-              </tr>
-            </thead>
-            <tbody>
-              {suppliers.map((sup) => (
-                <tr key={sup.id}>
-                  <td>#{sup.id}</td>
-                  <td><strong>{sup.name}</strong></td>
-                  <td>{sup.contact_email || "-"}</td>
-                  <td>{sup.phone || "-"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+          {/* TAB 3: CATEGORÍAS */}
+          {activeTab === "categories" && (
+            <div className="data-card">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Categoría</th>
+                    <th>Depende de (Padre)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {categories.map((c) => {
+                    const parent = categories.find((cat) => cat.id === c.parent_category_id);
+                    return (
+                      <tr key={c.id}>
+                        <td>#{c.id}</td>
+                        <td><strong>{c.name}</strong></td>
+                        <td className="data-cell-muted">{parent ? parent.name : "— (Categoría Principal)"}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* TAB 4: PROVEEDORES */}
+          {activeTab === "suppliers" && (
+            <div className="data-card">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Nombre Proveedor</th>
+                    <th>Correo</th>
+                    <th>Teléfono</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {suppliers.map((s) => (
+                    <tr key={s.id}>
+                      <td>#{s.id}</td>
+                      <td><strong>{s.name}</strong></td>
+                      <td className="data-cell-muted">{s.contact_email || "-"}</td>
+                      <td>{s.phone || "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
 
       {/* MODAL CREAR / EDITAR PRODUCTO */}
@@ -433,6 +512,8 @@ export default function CatalogPage({ canCreate = true, canToggle = true }) {
                 ✕
               </button>
             </div>
+
+            {modalError && <div className="modal-error-banner">{modalError}</div>}
 
             <form onSubmit={handleSaveProduct} className="catalog-form">
               <div className="form-group">
@@ -518,12 +599,63 @@ export default function CatalogPage({ canCreate = true, canToggle = true }) {
                 />
               </div>
 
+              {/* SECCIÓN DE SUBIDA DE IMÁGENES A S3 */}
+              <div className="form-group" style={{ borderTop: "1px solid #e2e8f0", paddingTop: "1rem" }}>
+                <label style={{ fontWeight: 600 }}>Fotografías del Producto (AWS S3)</label>
+                <input
+                  type="file"
+                  accept="image/png, image/jpeg, image/webp"
+                  multiple
+                  onChange={handleImageChange}
+                  style={{ marginTop: "0.5rem" }}
+                />
+                <small className="data-cell-muted" style={{ display: "block", marginTop: "4px" }}>
+                  Máximo 5 fotos. La primera se guardará como portada.
+                </small>
+
+                {filePreviews.length > 0 && (
+                  <div style={{ display: "flex", gap: "10px", marginTop: "10px", flexWrap: "wrap" }}>
+                    {filePreviews.map((src, idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          width: "60px",
+                          height: "60px",
+                          borderRadius: "6px",
+                          overflow: "hidden",
+                          border: idx === 0 ? "2px solid #2563eb" : "1px solid #cbd5e1",
+                          position: "relative",
+                        }}
+                      >
+                        <img src={src} alt="Vista previa" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        {idx === 0 && (
+                          <span
+                            style={{
+                              position: "absolute",
+                              bottom: 0,
+                              left: 0,
+                              right: 0,
+                              background: "#2563eb",
+                              color: "#fff",
+                              fontSize: "9px",
+                              textAlign: "center",
+                            }}
+                          >
+                            Portada
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div className="modal-actions">
-                <button type="button" className="btn-secondary" onClick={closeProductModal}>
+                <button type="button" className="btn-secondary" disabled={submitting} onClick={closeProductModal}>
                   Cancelar
                 </button>
-                <button type="submit" className="btn-primary">
-                  Guardar Producto
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  {submitting ? "Guardando..." : "Guardar Producto"}
                 </button>
               </div>
             </form>
@@ -545,14 +677,14 @@ export default function CatalogPage({ canCreate = true, canToggle = true }) {
             <div className="variant-list">
               <h4>SKUs Existentes</h4>
               <ul>
-                {editingVariantProduct.variants.map((v) => (
+                {(editingVariantProduct.variants || []).map((v) => (
                   <li key={v.id} className="variant-item">
                     <span><strong>SKU:</strong> {v.sku}</span>
                     <span><strong>Color:</strong> {v.color || "-"}</span>
                     <span><strong>Talla:</strong> {v.size || "-"}</span>
                   </li>
                 ))}
-                {editingVariantProduct.variants.length === 0 && (
+                {(!editingVariantProduct.variants || editingVariantProduct.variants.length === 0) && (
                   <p className="data-empty">No hay variantes creadas para este producto.</p>
                 )}
               </ul>
