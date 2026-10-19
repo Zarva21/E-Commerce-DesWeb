@@ -6,6 +6,8 @@ export const PERMISSIONS = {
     views: ["dashboard", "catalogo", "inventario", "usuarios", "pedidos", "ofertas", "destacados"],
     canCreateProduct: true,
     canToggleProduct: true,
+    canDeleteProduct: true,
+    canManageCatalogEntities: true, // crear/editar/eliminar marcas, categorías y proveedores
     canAddInventoryProduct: true,
     canSeeEmployees: true,
     canSeeSalesStats: true,
@@ -15,6 +17,8 @@ export const PERMISSIONS = {
     views: ["dashboard", "catalogo", "inventario", "usuarios", "pedidos"],
     canCreateProduct: false,
     canToggleProduct: false,
+    canDeleteProduct: false,
+    canManageCatalogEntities: false,
     canAddInventoryProduct: false,
     canSeeEmployees: false,
     canSeeSalesStats: false,
