@@ -1,8 +1,9 @@
 import { useState } from "react";
 
 // Pop up para crear / editar una marca, categoría o proveedor.
-// fields: [{ name, label, type?, required?, placeholder?, options? }]
+// fields: [{ name, label, type?, required?, placeholder?, options?, hint? }]
 //   type: "text" (por defecto) | "email" | "tel" | "textarea" | "select" (con options: [{ value, label }])
+//   hint: línea de ayuda que se muestra debajo del campo
 // onSave(form) devuelve { ok } o { error }; si hay error se muestra y el pop up sigue abierto.
 export default function EntityModal({ title, fields, initial, submitLabel = "Guardar", onSave, onClose }) {
   const [form, setForm] = useState(initial);
@@ -68,6 +69,8 @@ export default function EntityModal({ title, fields, initial, submitLabel = "Gua
                   onChange={(e) => setField(f.name, e.target.value)}
                 />
               )}
+
+              {f.hint && <span className="form-hint">{f.hint}</span>}
             </div>
           ))}
 

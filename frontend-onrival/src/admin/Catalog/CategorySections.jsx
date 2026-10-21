@@ -17,6 +17,13 @@ export const flattenTree = (nodes, trail = []) =>
     ];
   });
 
+const TagIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z" />
+    <circle cx="7.5" cy="7.5" r="1.2" />
+  </svg>
+);
+
 // Categorías divididas en secciones fijas (Hombre, Mujer, Accesorios...).
 // Las secciones NO se editan ni se eliminan: solo se les agregan categorías.
 // productCount(id) cuenta los productos de esa categoría y de sus descendientes.
@@ -64,42 +71,34 @@ export default function CategorySections({ tree, productCount, canManage = true,
             {rows.length === 0 ? (
               <p className="cat-empty">Esta sección todavía no tiene categorías.</p>
             ) : (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Categoría</th>
-                    <th>Productos</th>
-                    {canManage && <th>Acciones</th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map(({ node, depth }) => (
-                    <tr key={node.id}>
-                      <td>
-                        <span className="cat-name" style={{ paddingLeft: depth * 20 }}>
-                          {depth > 0 && (
-                            <span className="cat-branch" aria-hidden="true">
-                              └
-                            </span>
-                          )}
-                          <strong>{node.name}</strong>
+              <ul className="cat-tree">
+                {rows.map(({ node, depth }) => {
+                  const count = productCount(node.id);
+                  return (
+                    <li key={node.id} className="cat-row" style={{ paddingLeft: 18 + depth * 28 }}>
+                      <div className="cat-row-main">
+                        {depth > 0 && <span className="cat-elbow" aria-hidden="true" />}
+                        <span className={`cat-node ${depth > 0 ? "cat-node-sub" : ""}`} aria-hidden="true">
+                          <TagIcon />
                         </span>
-                        {node.description && (
-                          <div className="data-cell-muted" style={{ paddingLeft: depth * 20 }}>
-                            {node.description}
-                          </div>
-                        )}
-                      </td>
-                      <td>{productCount(node.id)}</td>
-                      {canManage && (
-                        <td>
+                        <div className="cat-row-text">
+                          <strong>{node.name}</strong>
+                          {node.description && <span className="cat-row-desc">{node.description}</span>}
+                        </div>
+                      </div>
+
+                      <div className="cat-row-side">
+                        <span className={`cat-count ${count === 0 ? "cat-count-zero" : ""}`}>
+                          {count} {count === 1 ? "producto" : "productos"}
+                        </span>
+                        {canManage && (
                           <RowActions name={node.name} onEdit={() => onEdit(node)} onDelete={() => onDelete(node)} />
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </section>
         );

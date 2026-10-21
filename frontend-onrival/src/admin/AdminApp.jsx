@@ -54,7 +54,10 @@ export default function AdminApp({ role = "empleado", onExitAdmin }) {
       )}
 
       {currentView === "inventario" && (
-        <InventoryPage canAddProduct={permissions.canAddInventoryProduct} />
+        <InventoryPage
+          canAddProduct={permissions.canAddInventoryProduct}
+          canDelete={permissions.canDeleteProduct}
+        />
       )}
 
       {currentView === "usuarios" && <EmployeesPage canSeeEmployees={permissions.canSeeEmployees} />}

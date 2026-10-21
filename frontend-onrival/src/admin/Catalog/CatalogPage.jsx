@@ -7,7 +7,7 @@ import EntityTable from "./EntityTable";
 import EntityModal from "./EntityModal";
 import CategorySections, { flattenTree } from "./CategorySections";
 import { TrashIcon } from "./Icons";
-import { buildCategoryTree, categoryPathLabel } from "./categoryTree";
+import { buildCategoryTree, categoryPathLabel, findCategoryPath } from "./categoryTree";
 import {
   MOCK_PRODUCTS,
   MOCK_BRANDS,
@@ -136,6 +136,13 @@ export default function CatalogPage({
   const productsInCategory = (id) => {
     const ids = getDescendantIds(categories, id);
     return products.filter((p) => ids.includes(String(p.category_id))).length;
+  };
+
+  // Sección (Hombre, Mujer, Accesorios) a la que pertenece una categoría existente
+  // o a la que corresponde una nueva (el preset trae la categoría padre elegida).
+  const sectionOf = (item, preset) => {
+    const ref = item ? item.id : preset?.parent_category_id;
+    return findCategoryPath(categoryTree, ref)[0] ?? null;
   };
 
   // Filtro
@@ -379,7 +386,7 @@ export default function CatalogPage({
     // Las secciones principales (Hombre, Mujer, Accesorios) son fijas:
     // toda categoría tiene que colgar de una.
     const parent = toId(form.parent_category_id);
-    if (parent === null) return { error: "Seleccioná la categoría padre (Hombre, Mujer o Accesorios)." };
+    if (parent === null) return { error: "Seleccioná la categoría padre." };
     if (!categories.some((c) => sameId(c.id, parent))) {
       return { error: "La categoría padre indicada no existe." };
     }
@@ -459,7 +466,7 @@ export default function CatalogPage({
   };
 
   // Campos del formulario según el tipo
-  const entityFields = (type, item) => {
+  const entityFields = (type, item, preset) => {
     if (type === "brand") {
       return [
         { name: "name", label: "Nombre *", required: true, placeholder: "Ej: Adidas" },
@@ -473,11 +480,20 @@ export default function CatalogPage({
         { name: "phone", label: "Teléfono", type: "tel", placeholder: "+502 0000-0000" },
       ];
     }
-    // Categoría: el padre puede ser cualquiera menos ella misma y sus descendientes
-    const parentOptions = flattenTree(pruneTree(categoryTree, item?.id)).map((r) => ({
-      value: r.node.id,
-      label: r.label,
-    }));
+
+    // Categoría: el padre solo puede ser de la MISMA sección (Hombre, Mujer, Accesorios):
+    // la sección misma o cualquiera de sus categorías, menos ella misma y sus descendientes.
+    const section = sectionOf(item, preset);
+    const parentOptions = section
+      ? [
+          { value: section.id, label: section.name },
+          ...flattenTree(pruneTree(section.subcategories ?? [], item?.id), [section.name]).map((r) => ({
+            value: r.node.id,
+            label: r.label,
+          })),
+        ]
+      : flattenTree(pruneTree(categoryTree, item?.id)).map((r) => ({ value: r.node.id, label: r.label }));
+
     return [
       { name: "name", label: "Nombre *", required: true, placeholder: "Ej: Zapatillas" },
       { name: "description", label: "Descripción", type: "textarea", placeholder: "Opcional" },
@@ -487,11 +503,14 @@ export default function CatalogPage({
         type: "select",
         required: true,
         options: [{ value: "", label: "Seleccione categoría padre..." }, ...parentOptions],
+        hint: section ? `Solo se muestran las opciones de ${section.name}.` : undefined,
       },
     ];
   };
 
-  const entityFormFields = entityModal ? entityFields(entityModal.type, entityModal.item) : [];
+  const entityFormFields = entityModal
+    ? entityFields(entityModal.type, entityModal.item, entityModal.preset)
+    : [];
   const entityInitial = entityModal
     ? Object.fromEntries(
         entityFormFields.map((f) => [
@@ -500,6 +519,21 @@ export default function CatalogPage({
         ])
       )
     : {};
+
+  // Título del pop up: en categorías incluye la sección ("Nueva Categoría en Mujer")
+  const entityModalTitle = (() => {
+    if (!entityModal) return "";
+    const labels = ENTITY_LABELS[entityModal.type];
+    if (entityModal.type === "category") {
+      const section = sectionOf(entityModal.item, entityModal.preset);
+      if (section) {
+        return entityModal.item
+          ? `${labels.editTitle} · ${section.name}`
+          : `${labels.newTitle} en ${section.name}`;
+      }
+    }
+    return entityModal.item ? labels.editTitle : labels.newTitle;
+  })();
 
   // Botón de arriba a la derecha según la pestaña.
   // Categorías no tiene: se agregan desde el botón de cada sección (Hombre, Mujer, Accesorios).
@@ -741,12 +775,8 @@ export default function CatalogPage({
       {/* MODAL MARCA / CATEGORÍA / PROVEEDOR */}
       {entityModal && (
         <EntityModal
-          key={`${entityModal.type}-${entityModal.item?.id ?? "new"}`}
-          title={
-            entityModal.item
-              ? ENTITY_LABELS[entityModal.type].editTitle
-              : ENTITY_LABELS[entityModal.type].newTitle
-          }
+          key={`${entityModal.type}-${entityModal.item?.id ?? "new"}-${entityModal.preset?.parent_category_id ?? ""}`}
+          title={entityModalTitle}
           fields={entityFormFields}
           initial={entityInitial}
           onSave={handleSaveEntity}

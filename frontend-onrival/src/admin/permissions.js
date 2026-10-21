@@ -10,6 +10,7 @@ export const PERMISSIONS = {
     canManageCatalogEntities: true, // crear/editar/eliminar marcas, categorías y proveedores
     canAddInventoryProduct: true,
     canSeeEmployees: true,
+    canDeleteUsers: true,
     canSeeSalesStats: true,
   },
   empleado: {
@@ -21,6 +22,7 @@ export const PERMISSIONS = {
     canManageCatalogEntities: false,
     canAddInventoryProduct: false,
     canSeeEmployees: false,
+    canDeleteUsers: false,
     canSeeSalesStats: false,
   },
 };
