@@ -6,6 +6,7 @@ const TITLES = {
   inventario: "Inventario",
   usuarios: "Usuarios",
   pedidos: "Pedidos",
+  reportes: "Reportes",
   ofertas: "Ofertas",
   destacados: "Destacados",
 };

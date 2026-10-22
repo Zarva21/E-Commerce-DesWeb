@@ -2,7 +2,7 @@ import { MOCK_INVENTORY } from "../Inventory/mockInventory";
 import { MOCK_EMPLOYEES } from "../Users/mockUsers";
 import { MOCK_ORDERS } from "../Orders/mockOrders";
 import { MOCK_OFFERS } from "../Offers/mockOffers";
-import { MOCK_PRODUCTS } from "../Catalog/mockCatalog";
+import { MOCK_MONTHLY_SALES, MOCK_TOP_PRODUCTS } from "../Reports/reportsData";
 import "./DashboardHome.css";
 
 const formatPrice = (value) =>
@@ -11,15 +11,6 @@ const formatPrice = (value) =>
     currency: "GTQ",
     minimumFractionDigits: 2,
   }).format(value);
-
-// Datos simulados para el reporte de ventas mensuales
-const MOCK_MONTHLY_SALES = [
-  { month: "Mayo 2026", ordersCount: 14, totalAmount: 18450.0 },
-  { month: "Junio 2026", ordersCount: 22, totalAmount: 26800.0 },
-  { month: "Julio 2026", ordersCount: 19, totalAmount: 21350.0 },
-  { month: "Agosto 2026", ordersCount: 31, totalAmount: 38900.0 },
-  { month: "Septiembre 2026", ordersCount: 28, totalAmount: 34120.0 },
-];
 
 // showSalesStats: muestra "Ventas mensuales" y "Productos más vendidos" (solo admin).
 // allowedViews: secciones a las que el rol puede entrar; las tarjetas que llevan
@@ -69,14 +60,6 @@ export default function DashboardHome({ onNavigate, showSalesStats = true, allow
 
   // Solo tarjetas cuya sección destino está permitida para este rol
   const stats = allowedViews ? allStats.filter((s) => allowedViews.includes(s.id)) : allStats;
-
-  // Datos simulados para Productos Más Vendidos
-  const topSellingProducts = [
-    { id: 1, name: "Tacos F50 Pro Firm", salesCount: 142, revenue: 262700.0, brand: "Adidas" },
-    { id: 2, name: "Playera Dri-FIT", salesCount: 98, revenue: 17640.0, brand: "Nike" },
-    { id: 3, name: "Chumpa Deportiva Waterproof", salesCount: 65, revenue: 35750.0, brand: "Puma" },
-    { id: 4, name: "Balón Oficial de Competencia", salesCount: 54, revenue: 13500.0, brand: "Molten" },
-  ];
 
   // Cálculo del mes con mayores ventas
   const maxMonthlySales = Math.max(...MOCK_MONTHLY_SALES.map((s) => s.totalAmount));
@@ -147,7 +130,7 @@ export default function DashboardHome({ onNavigate, showSalesStats = true, allow
             </div>
 
             <ul className="dashboard-ranking-list">
-              {topSellingProducts.map((prod, index) => (
+              {MOCK_TOP_PRODUCTS.map((prod, index) => (
                 <li key={prod.id}>
                   <span className={`ranking-badge rank-${index + 1}`}>{index + 1}</span>
                   <div className="ranking-details">
@@ -188,7 +171,7 @@ export default function DashboardHome({ onNavigate, showSalesStats = true, allow
           <h4 className="stock-subtitle">Alertas que requieren reabastecimiento:</h4>
           <ul className="dashboard-stock-alert-list">
             {[...outOfStockItems, ...lowStockItems].slice(0, 4).map((item) => (
-              <li key={item.id}>
+              <li key={item.id ?? item.product_variant_id}>
                 <div className="stock-alert-info">
                   <span className="stock-alert-sku">SKU: {item.sku}</span>
                   <span className="stock-alert-location">Ubicación: {item.location || "N/A"}</span>

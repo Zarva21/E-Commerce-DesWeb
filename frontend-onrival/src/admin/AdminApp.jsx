@@ -6,6 +6,7 @@ import InventoryPage from "./Inventory/InventoryPage";
 import EmployeesPage from "./Users/UsersPage";
 import OrdersPage from "./Orders/OrdersPage";
 import OrderDetail from "./Orders/OrderDetail";
+import ReportsPage from "./Reports/ReportsPage";
 import OffersPage from "./Offers/OffersPage";
 import HeroSlidesPage from "./Destacados/HeroSlidesPage";
 import { getPermissions } from "./permissions";
@@ -60,7 +61,12 @@ export default function AdminApp({ role = "empleado", onExitAdmin }) {
         />
       )}
 
-      {currentView === "usuarios" && <EmployeesPage canSeeEmployees={permissions.canSeeEmployees} />}
+      {currentView === "usuarios" && (
+        <EmployeesPage
+          canSeeEmployees={permissions.canSeeEmployees}
+          canDelete={permissions.canDeleteUsers}
+        />
+      )}
 
       {currentView === "pedidos" &&
         (selectedOrderId ? (
@@ -68,6 +74,8 @@ export default function AdminApp({ role = "empleado", onExitAdmin }) {
         ) : (
           <OrdersPage onSelectOrder={setSelectedOrderId} />
         ))}
+
+      {currentView === "reportes" && <ReportsPage onNavigate={handleSelectView} />}
 
       {currentView === "ofertas" && <OffersPage />}
       {currentView === "destacados" && <HeroSlidesPage />}
