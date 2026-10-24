@@ -1,0 +1,13 @@
+.reports-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 24px; }
+.reports-kpi { min-width: 0; border: 1px solid var(--line); background: var(--surface); border-radius: 12px; padding: 18px 20px; }
+.reports-kpi-label { margin: 0 0 8px; font-size: 12px; font-weight: 700; color: var(--muted); }
+.reports-kpi-value { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 26px; line-height: 1.1; color: var(--violet-900); word-break: break-word; }
+.reports-kpi-sub { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 600; color: var(--violet-700); }
+
+@media (max-width: 900px) {
+  .reports-kpis { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 520px) {
+  .reports-kpis { grid-template-columns: 1fr; }
+}

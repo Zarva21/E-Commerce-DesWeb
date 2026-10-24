@@ -1,12 +1,43 @@
 import { useEffect, useState } from "react";
 import PageHeader from "../ui/PageHeader";
 import StatusBadge from "../ui/StatusBadge";
+import EntityModal from "../Catalog/EntityModal";
+import { TrashIcon } from "../Catalog/icons";
 import { userService } from "../../services/userService";
 import { MOCK_EMPLOYEES, MOCK_CLIENTS } from "./mockUsers";
 import "../ui/DataTable.css";
+import "../Catalog/CatalogPage.css";
 import "./UsersPage.css";
 
-export default function UsersPage({ canSeeEmployees = true }) {
+const str = (v) => String(v ?? "").trim();
+const norm = (v) => str(v).toLowerCase();
+const fullName = (p) => `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.name || "Usuario";
+const initialsOf = (p) =>
+  `${str(p.first_name || p.name).charAt(0)}${str(p.last_name).charAt(0)}`.toUpperCase() || "U";
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GENDERS = ["Masculino", "Femenino", "Otro", "Prefiero no decir"];
+
+const todayISO = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+const formatBirthDate = (value) => {
+  if (!value) return "—";
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString("es-GT", { day: "numeric", month: "long", year: "numeric" });
+};
+
+const nextEmployeeCode = (employees) => {
+  const max = employees.reduce((acc, e) => {
+    const n = parseInt(String(e.employee_code).replace(/\D/g, ""), 10);
+    return Number.isNaN(n) ? acc : Math.max(acc, n);
+  }, 0);
+  return `EMP-${String(max + 1).padStart(3, "0")}`;
+};
+
+export default function UsersPage({ canSeeEmployees = true, canDelete = true }) {
   const [activeTab, setActiveTab] = useState(canSeeEmployees ? "employees" : "clients");
   const tab = canSeeEmployees ? activeTab : "clients";
 
@@ -14,18 +45,9 @@ export default function UsersPage({ canSeeEmployees = true }) {
   const [clients, setClients] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal de nuevo empleado
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [formData, setFormData] = useState({
-    employee_code: "",
-    first_name: "",
-    last_name: "",
-    position: "Encargado de inventario",
-    email: "",
-    password: "",
-  });
+  const [modal, setModal] = useState(null); // { type: "employee" | "client", item }
+  const [detailId, setDetailId] = useState(null);
+  const detail = clients.find((c) => c.id === detailId) ?? null;
 
   const loadData = async () => {
     setLoading(true);
@@ -35,11 +57,11 @@ export default function UsersPage({ canSeeEmployees = true }) {
           userService.getEmployees(),
           userService.getClients(),
         ]);
-        setEmployees(empRes.status === "fulfilled" && empRes.value.length > 0 ? empRes.value : MOCK_EMPLOYEES);
-        setClients(cliRes.status === "fulfilled" && cliRes.value.length > 0 ? cliRes.value : MOCK_CLIENTS);
+        setEmployees(empRes.status === "fulfilled" && empRes.value?.length > 0 ? empRes.value : MOCK_EMPLOYEES);
+        setClients(cliRes.status === "fulfilled" && cliRes.value?.length > 0 ? cliRes.value : MOCK_CLIENTS);
       } else {
         const cliData = await userService.getClients();
-        setClients(cliData.length > 0 ? cliData : MOCK_CLIENTS);
+        setClients(cliData?.length > 0 ? cliData : MOCK_CLIENTS);
       }
     } catch (err) {
       console.warn("Fallo al consultar usuarios en backend, usando mocks:", err);
@@ -54,7 +76,185 @@ export default function UsersPage({ canSeeEmployees = true }) {
     loadData();
   }, [canSeeEmployees]);
 
-  // Alternar estado activo / inactivo
+  const emailTaken = (email, type, id) =>
+    employees.some((e) => !(type === "employee" && e.id === id) && norm(e.email) === norm(email)) ||
+    clients.some((c) => !(type === "client" && c.id === id) && norm(c.email) === norm(email));
+
+  // ---------------- GUARDAR ----------------
+  const saveEmployee = async (form, id) => {
+    const first_name = str(form.first_name);
+    const last_name = str(form.last_name);
+    const email = str(form.email);
+    const employee_code = str(form.employee_code);
+
+    if (!first_name || !last_name) return { error: "El nombre y el apellido son obligatorios." };
+    if (!EMAIL_RE.test(email)) return { error: "Ingresá un correo electrónico válido." };
+    if (emailTaken(email, "employee", id)) return { error: `Ya existe un usuario con el correo "${email}".` };
+    if (!employee_code) return { error: "El código de empleado es obligatorio." };
+    if (employees.some((e) => e.id !== id && norm(e.employee_code) === norm(employee_code))) {
+      return { error: `El código "${employee_code}" ya está en uso.` };
+    }
+    if (id == null && str(form.password).length < 6) {
+      return { error: "La contraseña temporal debe tener al menos 6 caracteres." };
+    }
+
+    const payload = {
+      first_name,
+      last_name,
+      name: `${first_name} ${last_name}`,
+      email,
+      employee_code,
+      position: str(form.position) || "Encargado de inventario",
+      password: form.password,
+    };
+
+    try {
+      if (id == null) {
+        await userService.createEmployee(payload);
+        await loadData();
+      } else {
+        setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, ...payload } : e)));
+      }
+      return { ok: true };
+    } catch (err) {
+      return { error: err.response?.data?.message || err.message || "Error al procesar el colaborador." };
+    }
+  };
+
+  const saveClient = (form, id) => {
+    const first_name = str(form.first_name);
+    const last_name = str(form.last_name);
+    const email = str(form.email);
+    const phone = str(form.phone);
+    const birth_date = str(form.birth_date);
+
+    if (!first_name || !last_name) return { error: "El nombre y el apellido son obligatorios." };
+    if (!EMAIL_RE.test(email)) return { error: "Ingresá un correo electrónico válido." };
+    if (emailTaken(email, "client", id)) return { error: `Ya existe un usuario con el correo "${email}".` };
+    if (phone && phone.replace(/\D/g, "").length < 8) {
+      return { error: "El teléfono debe tener al menos 8 dígitos." };
+    }
+    if (birth_date && birth_date > todayISO()) {
+      return { error: "La fecha de nacimiento no puede ser futura." };
+    }
+
+    const data = {
+      first_name,
+      last_name,
+      name: `${first_name} ${last_name}`,
+      email,
+      phone,
+      birth_date,
+      gender: str(form.gender),
+      marketing_enabled: form.marketing_enabled === "true",
+    };
+
+    setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...data } : c)));
+    return { ok: true };
+  };
+
+  const openModal = (type, item = null) => {
+    if (type === "employee" && !canSeeEmployees) return;
+    setDetailId(null);
+    setModal({ type, item });
+  };
+
+  const handleSave = (form) =>
+    modal.type === "employee"
+      ? saveEmployee(form, modal.item?.id ?? null)
+      : saveClient(form, modal.item.id);
+
+  const employeeFields = (isNew) => [
+    { name: "first_name", label: "Nombre *", required: true, placeholder: "Ej: Ana" },
+    { name: "last_name", label: "Apellido *", required: true, placeholder: "Ej: López" },
+    { name: "email", label: "Correo electrónico *", type: "email", required: true, placeholder: "nombre@onrival.com" },
+    { name: "employee_code", label: "Código de empleado *", required: true, placeholder: "EMP-001" },
+    { name: "position", label: "Cargo", placeholder: "Ej: Encargada de inventario" },
+    ...(isNew
+      ? [
+          {
+            name: "password",
+            label: "Contraseña temporal *",
+            type: "password",
+            required: true,
+            placeholder: "Mínimo 6 caracteres",
+            hint: "Se le entregará al colaborador para su primer ingreso.",
+          },
+        ]
+      : []),
+  ];
+
+  const clientFields = (item) => {
+    const genders = item?.gender && !GENDERS.includes(item.gender) ? [...GENDERS, item.gender] : GENDERS;
+    return [
+      { name: "first_name", label: "Nombre *", required: true },
+      { name: "last_name", label: "Apellido *", required: true },
+      { name: "email", label: "Correo electrónico *", type: "email", required: true },
+      { name: "phone", label: "Teléfono", type: "tel", placeholder: "0000-0000" },
+      { name: "birth_date", label: "Fecha de nacimiento", type: "date" },
+      {
+        name: "gender",
+        label: "Género",
+        type: "select",
+        options: [{ value: "", label: "Sin especificar" }, ...genders.map((g) => ({ value: g, label: g }))],
+      },
+      {
+        name: "marketing_enabled",
+        label: "Acepta promociones por correo",
+        type: "select",
+        options: [
+          { value: "false", label: "No" },
+          { value: "true", label: "Sí" },
+        ],
+      },
+    ];
+  };
+
+  const initialFor = (type, item) => {
+    if (type === "employee") {
+      return item
+        ? {
+            first_name: item.first_name ?? "",
+            last_name: item.last_name ?? "",
+            email: item.email ?? "",
+            employee_code: item.employee_code ?? "",
+            position: item.position || item.role || "",
+          }
+        : {
+            first_name: "",
+            last_name: "",
+            email: "",
+            employee_code: nextEmployeeCode(employees),
+            position: "Encargado de inventario",
+            password: "",
+          };
+    }
+    return {
+      first_name: item.first_name ?? "",
+      last_name: item.last_name ?? "",
+      email: item.email ?? "",
+      phone: item.phone ?? "",
+      birth_date: item.birth_date ?? "",
+      gender: item.gender ?? "",
+      marketing_enabled: item.marketing_enabled ? "true" : "false",
+    };
+  };
+
+  const modalFields = modal
+    ? modal.type === "employee"
+      ? employeeFields(!modal.item)
+      : clientFields(modal.item)
+    : [];
+
+  const modalTitle = !modal
+    ? ""
+    : modal.type === "employee"
+    ? modal.item
+      ? "Editar empleado"
+      : "Agregar empleado"
+    : "Editar cliente";
+
+  // ---------------- ACTIVAR / BLOQUEAR / ELIMINAR ----------------
   const handleToggleStatus = async (item, type) => {
     const targetUserId = item.user_id || item.id;
     try {
@@ -75,34 +275,21 @@ export default function UsersPage({ canSeeEmployees = true }) {
     }
   };
 
-  // Crear Empleado
-  const handleCreateEmployee = async (e) => {
-    e.preventDefault();
-    setFormError("");
+  const deleteEmployee = (employee) => {
+    if (!canDelete) return;
+    if (!window.confirm(`¿Eliminar a ${fullName(employee)}? Perderá el acceso al panel.`)) return;
+    setEmployees((prev) => prev.filter((e) => e.id !== employee.id));
+  };
 
-    if (!formData.employee_code.trim()) {
-      setFormError("El código de empleado es obligatorio.");
-      return;
-    }
-
-    setSubmitting(true);
-    try {
-      await userService.createEmployee(formData);
-      await loadData();
-      setIsModalOpen(false);
-      setFormData({
-        employee_code: "",
-        first_name: "",
-        last_name: "",
-        position: "Encargado de inventario",
-        email: "",
-        password: "",
-      });
-    } catch (err) {
-      setFormError(err.response?.data?.message || "Error al registrar el empleado.");
-    } finally {
-      setSubmitting(false);
-    }
+  const deleteClient = (client) => {
+    if (!canDelete) return;
+    const note =
+      client.totalOrders > 0
+        ? `\n\nTiene ${client.totalOrders} pedido(s) realizados. El historial de pedidos se conserva.`
+        : "";
+    if (!window.confirm(`¿Eliminar al cliente ${fullName(client)}?${note}`)) return;
+    setClients((prev) => prev.filter((c) => c.id !== client.id));
+    if (detailId === client.id) setDetailId(null);
   };
 
   return (
@@ -115,10 +302,9 @@ export default function UsersPage({ canSeeEmployees = true }) {
             : "Directorio de clientes registrados en la tienda"
         }
         actionLabel={tab === "employees" ? "Agregar empleado" : undefined}
-        onAction={tab === "employees" ? () => setIsModalOpen(true) : undefined}
+        onAction={tab === "employees" ? () => openModal("employee") : undefined}
       />
 
-      {/* Control de Pestañas Superior */}
       <div className="users-tabs-bar">
         {canSeeEmployees && (
           <button
@@ -140,7 +326,7 @@ export default function UsersPage({ canSeeEmployees = true }) {
 
       {loading ? (
         <div className="data-card">
-          <p className="data-empty">Cargando registros...</p>
+          <p className="data-empty">Cargando registros desde la base de datos...</p>
         </div>
       ) : (
         <>
@@ -152,48 +338,70 @@ export default function UsersPage({ canSeeEmployees = true }) {
                   <tr>
                     <th>Nombre</th>
                     <th>Correo</th>
-                    <th>Rol / Puesto</th>
+                    <th>Cargo</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {employees.map((employee) => (
-                    <tr key={employee.id}>
-                      <td>
-                        <span className="data-cell-title">{employee.name}</span>
-                        {employee.employee_code && (
-                          <div className="data-cell-muted">Cód: {employee.employee_code}</div>
-                        )}
-                      </td>
-                      <td className="data-cell-muted">{employee.email}</td>
-                      <td>
-                        <span className="user-role-badge">{employee.role}</span>
-                      </td>
-                      <td>
-                        <StatusBadge
-                          label={employee.status}
-                          tone={employee.status === "Activo" ? "success" : "danger"}
-                        />
-                      </td>
-                      <td>
-                        <div className="data-actions">
-                          <button
-                            type="button"
-                            className="data-action-btn data-action-btn-danger"
-                            onClick={() => handleToggleStatus(employee, "employee")}
-                          >
-                            {employee.status === "Activo" ? "Desactivar" : "Activar"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {employees.map((employee) => {
+                    const active = employee.status === "Activo" || employee.is_active;
+                    return (
+                      <tr key={employee.id}>
+                        <td>
+                          <span className="data-cell-title">{fullName(employee)}</span>
+                          <div className="data-cell-muted">
+                            Código: {employee.employee_code || `#${employee.id}`}
+                          </div>
+                        </td>
+                        <td className="data-cell-muted">{employee.email}</td>
+                        <td>
+                          {employee.position || employee.role ? (
+                            <span className="user-role-badge">{employee.position || employee.role}</span>
+                          ) : (
+                            <span className="data-cell-muted">—</span>
+                          )}
+                        </td>
+                        <td>
+                          <StatusBadge label={active ? "Activo" : "Inactivo"} tone={active ? "success" : "danger"} />
+                        </td>
+                        <td>
+                          <div className="data-actions">
+                            <button
+                              type="button"
+                              className="data-action-btn"
+                              onClick={() => openModal("employee", employee)}
+                            >
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className={`data-action-btn ${active ? "data-action-btn-danger" : ""}`}
+                              onClick={() => handleToggleStatus(employee, "employee")}
+                            >
+                              {active ? "Desactivar" : "Activar"}
+                            </button>
+                            {canDelete && (
+                              <button
+                                type="button"
+                                className="data-action-btn data-action-btn-icon data-action-btn-danger"
+                                onClick={() => deleteEmployee(employee)}
+                                title="Eliminar empleado"
+                                aria-label={`Eliminar a ${fullName(employee)}`}
+                              >
+                                <TrashIcon />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
               {employees.length === 0 && (
-                <p className="data-empty">No hay empleados registrados actualmente.</p>
+                <p className="data-empty">No hay colaboradores registrados actualmente.</p>
               )}
             </div>
           )}
@@ -212,39 +420,56 @@ export default function UsersPage({ canSeeEmployees = true }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {clients.map((client) => (
-                    <tr key={client.id}>
-                      <td>
-                        <span className="data-cell-title">{client.name}</span>
-                      </td>
-                      <td className="data-cell-muted">
-                        <div>{client.email}</div>
-                        <small style={{ color: "var(--muted)", fontSize: "12px" }}>
-                          {client.phone}
-                        </small>
-                      </td>
-                      <td>
-                        <strong>{client.totalOrders} pedidos</strong>
-                      </td>
-                      <td>
-                        <StatusBadge
-                          label={client.status}
-                          tone={client.status === "Activo" ? "success" : "danger"}
-                        />
-                      </td>
-                      <td>
-                        <div className="data-actions">
-                          <button
-                            type="button"
-                            className="data-action-btn data-action-btn-danger"
-                            onClick={() => handleToggleStatus(client, "client")}
-                          >
-                            {client.status === "Activo" ? "Bloquear" : "Desbloquear"}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {clients.map((client) => {
+                    const active = client.status === "Activo" || client.is_active;
+                    return (
+                      <tr key={client.id}>
+                        <td>
+                          <span className="data-cell-title">{fullName(client)}</span>
+                        </td>
+                        <td className="data-cell-muted">
+                          <div>{client.email}</div>
+                          <small style={{ color: "var(--muted)", fontSize: "12px" }}>
+                            {client.phone || "Sin teléfono"}
+                          </small>
+                        </td>
+                        <td>
+                          <strong>{client.totalOrders ?? 0} pedidos</strong>
+                        </td>
+                        <td>
+                          <StatusBadge label={active ? "Activo" : "Bloqueado"} tone={active ? "success" : "danger"} />
+                        </td>
+                        <td>
+                          <div className="data-actions">
+                            <button type="button" className="data-action-btn" onClick={() => setDetailId(client.id)}>
+                              Ver detalle
+                            </button>
+                            <button type="button" className="data-action-btn" onClick={() => openModal("client", client)}>
+                              Editar
+                            </button>
+                            <button
+                              type="button"
+                              className={`data-action-btn ${active ? "data-action-btn-danger" : ""}`}
+                              onClick={() => handleToggleStatus(client, "client")}
+                            >
+                              {active ? "Bloquear" : "Desbloquear"}
+                            </button>
+                            {canDelete && (
+                              <button
+                                type="button"
+                                className="data-action-btn data-action-btn-icon data-action-btn-danger"
+                                onClick={() => deleteClient(client)}
+                                title="Eliminar cliente"
+                                aria-label={`Eliminar a ${fullName(client)}`}
+                              >
+                                <TrashIcon />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
 
@@ -256,107 +481,77 @@ export default function UsersPage({ canSeeEmployees = true }) {
         </>
       )}
 
-      {/* MODAL AGREGAR EMPLEADO */}
-      {isModalOpen && (
-        <div className="catalog-modal-overlay" onClick={() => setIsModalOpen(false)}>
+      {/* MODAL: AGREGAR / EDITAR */}
+      {modal && (
+        <EntityModal
+          key={`${modal.type}-${modal.item?.id ?? "new"}`}
+          title={modalTitle}
+          fields={modalFields}
+          initial={initialFor(modal.type, modal.item)}
+          onSave={handleSave}
+          onClose={() => setModal(null)}
+        />
+      )}
+
+      {/* MODAL: VER DETALLE DEL CLIENTE */}
+      {detail && (
+        <div className="catalog-modal-overlay" onClick={() => setDetailId(null)}>
           <div className="catalog-modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="catalog-modal-header">
-              <h2>Nuevo Colaborador / Empleado</h2>
-              <button type="button" className="close-btn" onClick={() => setIsModalOpen(false)}>
+              <h2>Detalle del cliente</h2>
+              <button type="button" className="close-btn" onClick={() => setDetailId(null)}>
                 ✕
               </button>
             </div>
 
-            {formError && <div className="modal-error-banner">{formError}</div>}
-
-            <form onSubmit={handleCreateEmployee} className="catalog-form">
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Código de Empleado *</label>
-                  <input
-                    type="text"
-                    placeholder="Ej: EMP-001"
-                    value={formData.employee_code}
-                    onChange={(e) =>
-                      setFormData({ ...formData, employee_code: e.target.value.toUpperCase() })
-                    }
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Puesto / Cargo</label>
-                  <select
-                    value={formData.position}
-                    onChange={(e) => setFormData({ ...formData, position: e.target.value })}
-                  >
-                    <option value="Administrador">Administrador</option>
-                    <option value="Encargado de inventario">Encargado de inventario</option>
-                    <option value="Atención al cliente">Atención al cliente</option>
-                    <option value="Operativo de despacho">Operativo de despacho</option>
-                  </select>
-                </div>
+            <div className="user-detail-head">
+              <span className="user-detail-avatar" aria-hidden="true">
+                {initialsOf(detail)}
+              </span>
+              <div className="user-detail-name">
+                <strong>{fullName(detail)}</strong>
+                <StatusBadge
+                  label={detail.status === "Activo" || detail.is_active ? "Activo" : "Bloqueado"}
+                  tone={detail.status === "Activo" || detail.is_active ? "success" : "danger"}
+                />
               </div>
+            </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Nombre *</label>
-                  <input
-                    type="text"
-                    placeholder="Nombre"
-                    value={formData.first_name}
-                    onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Apellido *</label>
-                  <input
-                    type="text"
-                    placeholder="Apellido"
-                    value={formData.last_name}
-                    onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-                    required
-                  />
-                </div>
+            <dl className="user-detail-grid">
+              <div className="user-detail-item">
+                <dt>Correo</dt>
+                <dd>{detail.email}</dd>
               </div>
+              <div className="user-detail-item">
+                <dt>Teléfono</dt>
+                <dd>{detail.phone || "—"}</dd>
+              </div>
+              <div className="user-detail-item">
+                <dt>Fecha de nacimiento</dt>
+                <dd>{formatBirthDate(detail.birth_date)}</dd>
+              </div>
+              <div className="user-detail-item">
+                <dt>Género</dt>
+                <dd>{detail.gender || "—"}</dd>
+              </div>
+              <div className="user-detail-item">
+                <dt>Pedidos realizados</dt>
+                <dd>{detail.totalOrders ?? 0}</dd>
+              </div>
+              <div className="user-detail-item">
+                <dt>Promociones por correo</dt>
+                <dd>{detail.marketing_enabled ? "Las acepta" : "No las acepta"}</dd>
+              </div>
+            </dl>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Correo Electrónico *</label>
-                  <input
-                    type="email"
-                    placeholder="colaborador@onrival.com"
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Contraseña de Acceso *</label>
-                  <input
-                    type="password"
-                    placeholder="Mínimo 6 caracteres"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="modal-actions">
-                <button
-                  type="button"
-                  className="btn-secondary"
-                  disabled={submitting}
-                  onClick={() => setIsModalOpen(false)}
-                >
-                  Cancelar
-                </button>
-                <button type="submit" className="btn-primary" disabled={submitting}>
-                  {submitting ? "Guardando..." : "Crear Empleado"}
-                </button>
-              </div>
-            </form>
+            <div className="modal-actions">
+              <button type="button" className="btn-secondary" onClick={() => setDetailId(null)}>
+                Cerrar
+              </button>
+              <button type="button" className="btn-primary" onClick={() => openModal("client", detail)}>
+                Editar
+              </button>
+            </div>
           </div>
         </div>
       )}

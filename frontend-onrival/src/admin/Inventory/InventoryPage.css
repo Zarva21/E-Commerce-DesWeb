@@ -101,3 +101,8 @@
   font-size: 14px;
   resize: vertical;
 }
+
+/* ---------- FORMULARIO DE PRODUCTO (inventario) ---------- */
+.inv-form-section { display: flex; flex-direction: column; gap: 14px; padding-top: 16px; border-top: 1px solid #e2e8f0; }
+.inv-form-section-title { margin: 0; font-size: 12.5px; font-weight: 800; letter-spacing: 0.5px; text-transform: uppercase; color: #4c1d95; }
+.inv-form-note { margin: 0; padding: 9px 12px; border: 1px solid #e9d5ff; border-radius: 8px; background: #faf5ff; color: #6b21a8; font-size: 12.5px; }
