@@ -274,6 +274,7 @@ export default function InventoryPage({ canAddProduct = true, canDelete = true }
       const id = Date.now();
       setInventory((prev) => [{ product_variant_id: id, ...data, quantity_on_hand: quantity }, ...prev]);
 
+      JavaScript
       if (quantity > 0) {
         setMovements((prev) => [
           {
@@ -291,9 +292,6 @@ export default function InventoryPage({ canAddProduct = true, canDelete = true }
         ]);
       }
     }
-
-    closeProductModal();
-  };
 
     closeProductModal();
   };
