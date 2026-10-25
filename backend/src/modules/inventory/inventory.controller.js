@@ -40,29 +40,38 @@ exports.getMovementHistory = async (req, res) => {
 exports.receive = async (req, res) => {
   try {
     const { product_variant_id, quantity, reference, notes } = req.body;
-    if (!product_variant_id || !quantity) {
-      return res.status(400).send({ message: "product_variant_id y quantity son obligatorios." });
-    }
-    const stock = await inventoryService.receiveFromSupplier({
-      product_variant_id, quantity, employee_id: req.userId || null, reference, notes
+    const employee_id = req.userId;
+
+    const result = await inventoryService.receiveFromSupplier({
+      product_variant_id,
+      quantity,
+      employee_id,
+      reference,
+      notes,
     });
-    res.status(201).send(stock);
+
+    return res.status(200).send({ message: "Mercadería recibida exitosamente.", data: result });
   } catch (err) {
-    res.status(err.status || 500).send({ message: err.message });
+    return res.status(err.status || 500).send({ message: err.message });
   }
 };
 
 exports.adjust = async (req, res) => {
   try {
-    const { product_variant_id, quantity, movement_type, notes } = req.body;
-    if (!product_variant_id || !quantity || !movement_type) {
-      return res.status(400).send({ message: "product_variant_id, quantity y movement_type son obligatorios." });
-    }
-    const stock = await inventoryService.adjustStock({
-      product_variant_id, quantity, movement_type, employee_id: req.userId || null, notes
+    const { product_variant_id, quantity, movement_type, notes, reference } = req.body;
+    const employee_id = req.userId;
+
+    const result = await inventoryService.adjustStock({
+      product_variant_id,
+      quantity,
+      movement_type,
+      employee_id,
+      notes,
+      reference,
     });
-    res.status(201).send(stock);
+
+    return res.status(200).send({ message: "Ajuste de inventario aplicado.", data: result });
   } catch (err) {
-    res.status(err.status || 500).send({ message: err.message });
+    return res.status(err.status || 500).send({ message: err.message });
   }
 };

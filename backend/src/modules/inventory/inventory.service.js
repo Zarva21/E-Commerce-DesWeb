@@ -12,12 +12,24 @@ const ProductImage = db.productImage;
 // siempre importa esta constante para evitar typos que rompan reportes/filtros después.
 const MOVEMENT_TYPES = {
   PURCHASE_IN: "PURCHASE_IN",               // Entrada_Compra (recepción de proveedor)
+  ADJUSTMENT_IN: "ADJUSTMENT_IN",           // Ajuste positivo de conteo manual
+  ADJUSTMENT_OUT: "ADJUSTMENT_OUT",         // Ajuste negativo de conteo manual
   SALE_OUT: "SALE_OUT",                     // Salida_Venta (checkout confirmado)
-  SALE_RETURN_IN: "SALE_RETURN_IN",         // Reingreso por cancelación/devolución de una venta
+  SALE_RETURN_IN: "SALE_RETURN_IN",         // Reingreso por cancelación/devolución
   DAMAGE_OUT: "DAMAGE_OUT",                 // Salida_Defecto (mermas)
-  SUPPLIER_RETURN_OUT: "SUPPLIER_RETURN_OUT" // Salida_Devolucion_Proveedor
+  SUPPLIER_RETURN_OUT: "SUPPLIER_RETURN_OUT"// Salida_Devolucion_Proveedor
 };
 exports.MOVEMENT_TYPES = MOVEMENT_TYPES;
+
+// Tipos permitidos para el formulario administrativo:
+const ADMIN_ADJUSTABLE_TYPES = [
+  MOVEMENT_TYPES.PURCHASE_IN,
+  MOVEMENT_TYPES.ADJUSTMENT_IN,
+  MOVEMENT_TYPES.ADJUSTMENT_OUT,
+  MOVEMENT_TYPES.DAMAGE_OUT,
+  MOVEMENT_TYPES.SUPPLIER_RETURN_OUT
+];
+
 
 /**
  * recordMovement — LA función de doble escritura. Todo lo demás en este archivo
@@ -166,9 +178,9 @@ exports.registerSupplierReturn = async ({ product_variant_id, quantity, employee
  * SALE_OUT y SALE_RETURN_IN quedan fuera a propósito: esos los disparan
  * checkout.service.js y order.service.js internamente, nunca un humano a mano.
  */
-const ADMIN_ADJUSTABLE_TYPES = [MOVEMENT_TYPES.DAMAGE_OUT, MOVEMENT_TYPES.SUPPLIER_RETURN_OUT];
 
-exports.adjustStock = async ({ product_variant_id, quantity, movement_type, employee_id, notes }) => {
+
+exports.adjustStock = async ({ product_variant_id, quantity, movement_type, employee_id, notes, reference }) => {
   if (!ADMIN_ADJUSTABLE_TYPES.includes(movement_type)) {
     const error = new Error(
       `Tipo de movimiento no permitido para ajuste manual: "${movement_type}". Usa uno de: ${ADMIN_ADJUSTABLE_TYPES.join(", ")}.`
@@ -177,9 +189,27 @@ exports.adjustStock = async ({ product_variant_id, quantity, movement_type, empl
     throw error;
   }
 
+  const rawQty = Number(quantity);
+  if (!rawQty || rawQty <= 0) {
+    const error = new Error("La cantidad debe ser un número mayor a cero.");
+    error.status = 400;
+    throw error;
+  }
+
+  // Determinar si entra (+) o sale (-)
+  const isIncoming = [MOVEMENT_TYPES.PURCHASE_IN, MOVEMENT_TYPES.ADJUSTMENT_IN].includes(movement_type);
+  const delta = isIncoming ? Math.abs(rawQty) : -Math.abs(rawQty);
+
   return db.sequelize.transaction((t) =>
     recordMovement(
-      { product_variant_id, quantityDelta: -Math.abs(quantity), movement_type, employee_id, notes },
+      {
+        product_variant_id,
+        quantityDelta: delta,
+        movement_type,
+        employee_id,
+        reference: reference || "Ajuste manual administrativo",
+        notes
+      },
       t
     )
   );
@@ -198,58 +228,76 @@ exports.getStockByVariant = async (product_variant_id) => {
 };
 
 exports.getAllStock = async () => {
-  const stocks = await Stock.findAll({
+  // Partimos de ProductVariant con include hacia Stock (LEFT JOIN)
+  const variants = await ProductVariant.findAll({
     include: [
       {
-        model: ProductVariant,
-        attributes: ["id", "sku", "size", "color", "weight", "barcode", "is_active"],
+        model: Stock,
+        required: false
+      },
+      {
+        model: Product,
+        attributes: ["id", "name", "cost_price", "sale_price", "is_active"],
         include: [
-          {
-            model: Product,
-            attributes: ["id", "name", "cost_price", "sale_price"],
-            include: [
-              { model: Brand, attributes: ["id", "name"] },
-              { model: Category, attributes: ["id", "name"] },
-              { 
-                model: ProductImage, 
-                attributes: ["id", "image_url", "is_primary", "display_order"] 
-              },
-            ],
+          { model: Brand, attributes: ["id", "name"] },
+          { model: Category, attributes: ["id", "name"] },
+          { 
+            model: ProductImage, 
+            attributes: ["id", "image_url", "is_primary", "display_order"] 
           },
         ],
       },
     ],
-    order: [["product_variant_id", "ASC"]],
+    order: [
+      [Product, "name", "ASC"],
+      ["size", "ASC"],
+    ],
   });
 
-  return stocks.map((sInstance) => {
-    const s = sInstance.toJSON ? sInstance.toJSON() : sInstance;
-    const variant = s.product_variant || s.ProductVariant;
-    const prod = variant?.product || variant?.Product;
+  return variants.map((vInstance) => {
+    const v = vInstance.toJSON ? vInstance.toJSON() : vInstance;
+    const stockRecord = v.stock || v.Stock || null;
+    const prod = v.product || v.Product;
     const brand = prod?.brand || prod?.Brand;
     const cat = prod?.category || prod?.Category;
     const images = prod?.product_images || prod?.ProductImages || [];
-    
-    // Priorizar imagen primaria o la primera según display_order
+
     const primaryImg =
       images.find((img) => img.is_primary)?.image_url ||
       images[0]?.image_url ||
       "/img/placeholder.png";
 
+    const qty = stockRecord ? Number(stockRecord.quantity_on_hand) : 0;
+    const reorder = stockRecord ? Number(stockRecord.reorder_level) : 5;
+
+    let stockStatus = "in_stock";
+    if (qty === 0) {
+      stockStatus = "out_of_stock";
+    } else if (qty <= reorder) {
+      stockStatus = "low_stock";
+    }
+
     return {
-      product_variant_id: Number(s.product_variant_id),
-      sku: variant?.sku || `SKU-${s.product_variant_id}`,
+      product_variant_id: Number(v.id),
+      product_id: prod?.id,
+      sku: v.sku,
       name: prod?.name
-        ? `${prod.name} (${variant?.size || "U"}${variant?.color ? " · " + variant.color : ""})`
-        : `Variante #${s.product_variant_id}`,
+        ? `${prod.name} (${v.size || "U"}${v.color ? " · " + v.color : ""})`
+        : `Variante #${v.id}`,
+      product_name: prod?.name || "Sin nombre",
+      size: v.size || "Única",
+      color: v.color || null,
+      barcode: v.barcode || null,
       brand: brand?.name || "Sin marca",
       category: cat?.name || "General",
-      gender: "General", // Placeholder para el front (al no existir columna en BD)
+      gender: "General",
       price: Number(prod?.sale_price || 0),
       cost_price: Number(prod?.cost_price || 0),
       image: primaryImg,
-      quantity_on_hand: Number(s.quantity_on_hand),
-      reorder_level: Number(s.reorder_level),
+      quantity_on_hand: qty,
+      reorder_level: reorder,
+      status: stockStatus,
+      has_stock_record: Boolean(stockRecord)
     };
   });
 };

@@ -1,8 +1,5 @@
-import { MOCK_INVENTORY } from "../Inventory/mockInventory";
-import { MOCK_EMPLOYEES } from "../Users/mockUsers";
-import { MOCK_ORDERS } from "../Orders/mockOrders";
-import { MOCK_OFFERS } from "../Offers/mockOffers";
-import { MOCK_MONTHLY_SALES, MOCK_TOP_PRODUCTS } from "../Reports/reportsData";
+import { useEffect, useState } from "react";
+import { reportsService } from "../../services/reportsService";
 import "./DashboardHome.css";
 
 const formatPrice = (value) =>
@@ -10,59 +7,93 @@ const formatPrice = (value) =>
     style: "currency",
     currency: "GTQ",
     minimumFractionDigits: 2,
-  }).format(value);
+  }).format(value || 0);
 
-// showSalesStats: muestra "Ventas mensuales" y "Productos más vendidos" (solo admin).
-// allowedViews: secciones a las que el rol puede entrar; las tarjetas que llevan
-// a otra sección no se muestran. Sin esta lista se muestran todas.
 export default function DashboardHome({ onNavigate, showSalesStats = true, allowedViews }) {
-  const pendingOrders = MOCK_ORDERS.filter((o) => o.status === "Pendiente").length;
-  const activeOffers = MOCK_OFFERS.filter((o) => o.is_active ?? o.active).length;
-  const activeEmployees = MOCK_EMPLOYEES.filter(
-    (e) => e.is_active ?? e.active ?? e.status === "Activo"
-  ).length;
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState({
+    inventory: { total: 0, normal: 0, low: 0, out: 0 },
+    activeEmployees: 0,
+    pendingOrders: 0,
+    activeCoupons: 0,
+    monthlySales: [],
+    topProducts: [],
+    lowStockAlerts: [],
+    recentOrders: []
+  });
 
-  // Indicadores de Estado de Existencias
-  const lowStockItems = MOCK_INVENTORY.filter(
-    (item) => item.quantity_on_hand <= item.reorder_level && item.quantity_on_hand > 0
-  );
-  const outOfStockItems = MOCK_INVENTORY.filter((item) => item.quantity_on_hand === 0);
-  const normalStockCount = MOCK_INVENTORY.filter(
-    (item) => item.quantity_on_hand > item.reorder_level
-  ).length;
+  useEffect(() => {
+    let isMounted = true;
+    const loadOverview = async () => {
+      setLoading(true);
+      try {
+        const res = await reportsService.getHomeOverview();
+        if (isMounted) {
+          setData({
+            inventory: res.inventory || { total: 0, normal: 0, low: 0, out: 0 },
+            activeEmployees: res.activeEmployees || 0,
+            pendingOrders: res.pendingOrders || 0,
+            activeCoupons: res.activeCoupons || 0,
+            monthlySales: res.monthlySales || [],
+            topProducts: res.topProducts || [],
+            lowStockAlerts: res.lowStockAlerts || [],
+            recentOrders: res.recentOrders || []
+          });
+        }
+      } catch (err) {
+        console.error("Error al cargar DashboardHome:", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadOverview();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const criticalStockCount = data.inventory.low + data.inventory.out;
 
   const allStats = [
     {
       id: "inventario",
       label: "Total Ítems / Stock Bajo",
-      value: `${MOCK_INVENTORY.length} / ${lowStockItems.length + outOfStockItems.length}`,
+      value: `${data.inventory.total} / ${criticalStockCount}`,
       hint: "Ver inventario →",
     },
     {
       id: "usuarios",
-      label: "Empleados / Usuarios activos",
-      value: activeEmployees,
+      label: "Empleados activos",
+      value: data.activeEmployees,
       hint: "Ver usuarios →",
     },
     {
       id: "pedidos",
       label: "Pedidos pendientes",
-      value: pendingOrders,
+      value: data.pendingOrders,
       hint: "Ver pedidos →",
     },
     {
       id: "ofertas",
-      label: "Ofertas / Cupones activos",
-      value: activeOffers,
+      label: "Cupones activos",
+      value: data.activeCoupons,
       hint: "Ver ofertas →",
     },
   ];
 
-  // Solo tarjetas cuya sección destino está permitida para este rol
   const stats = allowedViews ? allStats.filter((s) => allowedViews.includes(s.id)) : allStats;
+  const maxMonthlySales = data.monthlySales.length > 0
+    ? Math.max(...data.monthlySales.map((s) => s.totalAmount || 0))
+    : 1;
 
-  // Cálculo del mes con mayores ventas
-  const maxMonthlySales = Math.max(...MOCK_MONTHLY_SALES.map((s) => s.totalAmount));
+  if (loading) {
+    return (
+      <div className="dashboard" style={{ padding: "3rem", textAlign: "center", color: "#64748b" }}>
+        <p>Cargando panel de control...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard">
@@ -82,7 +113,7 @@ export default function DashboardHome({ onNavigate, showSalesStats = true, allow
         ))}
       </div>
 
-      {/* REPORTE 1: VENTAS MENSUALES (solo con permiso) */}
+      {/* REPORTE 1: VENTAS MENSUALES */}
       {showSalesStats && (
         <div className="dashboard-card dashboard-section">
           <div className="dashboard-card-head">
@@ -95,31 +126,38 @@ export default function DashboardHome({ onNavigate, showSalesStats = true, allow
             </button>
           </div>
 
-          <div className="monthly-sales-chart">
-            {MOCK_MONTHLY_SALES.map((item) => {
-              const barHeightPercentage = Math.round((item.totalAmount / maxMonthlySales) * 100);
-              return (
-                <div key={item.month} className="monthly-sales-col">
-                  <span className="monthly-sales-val">{formatPrice(item.totalAmount)}</span>
-                  <div className="bar-container">
-                    <div
-                      className="bar-fill"
-                      style={{ height: `${barHeightPercentage}%` }}
-                      title={`${item.ordersCount} pedidos`}
-                    />
+          {data.monthlySales.length === 0 ? (
+            <p className="dashboard-empty-msg" style={{ padding: "1.5rem 0" }}>No hay ventas registradas en el período.</p>
+          ) : (
+            <div className="monthly-sales-chart">
+              {data.monthlySales.map((item) => {
+                const barHeightPercentage = maxMonthlySales > 0
+                  ? Math.round((item.totalAmount / maxMonthlySales) * 100)
+                  : 0;
+                return (
+                  <div key={item.month} className="monthly-sales-col">
+                    <span className="monthly-sales-val">{formatPrice(item.totalAmount)}</span>
+                    <div className="bar-container">
+                      <div
+                        className="bar-fill"
+                        style={{ height: `${barHeightPercentage}%` }}
+                        title={`${item.ordersCount} pedidos`}
+                      />
+                    </div>
+                    <span className="monthly-sales-label">{item.month}</span>
+                    <span className="monthly-sales-sub">{item.ordersCount} ped.</span>
                   </div>
-                  <span className="monthly-sales-label">{item.month}</span>
-                  <span className="monthly-sales-sub">{item.ordersCount} ped.</span>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
-      {/* GRID DE REPORTE DE PRODUCTOS MÁS VENDIDOS Y ESTADO DE EXISTENCIAS */}
+      {/* GRID: PRODUCTOS MÁS VENDIDOS Y ESTADO DE EXISTENCIAS */}
       <div className={`dashboard-grid ${showSalesStats ? "" : "dashboard-grid-single"}`}>
-        {/* REPORTE 2: PRODUCTOS MÁS VENDIDOS (solo con permiso) */}
+        
+        {/* REPORTE 2: PRODUCTOS MÁS VENDIDOS */}
         {showSalesStats && (
           <div className="dashboard-card">
             <div className="dashboard-card-head">
@@ -129,18 +167,24 @@ export default function DashboardHome({ onNavigate, showSalesStats = true, allow
               </button>
             </div>
 
-            <ul className="dashboard-ranking-list">
-              {MOCK_TOP_PRODUCTS.map((prod, index) => (
-                <li key={prod.id}>
-                  <span className={`ranking-badge rank-${index + 1}`}>{index + 1}</span>
-                  <div className="ranking-details">
-                    <span className="ranking-name">{prod.name}</span>
-                    <span className="ranking-brand">{prod.brand} • {prod.salesCount} uds. vendidas</span>
-                  </div>
-                  <span className="ranking-revenue">{formatPrice(prod.revenue)}</span>
-                </li>
-              ))}
-            </ul>
+            {data.topProducts.length === 0 ? (
+              <p className="dashboard-empty-msg" style={{ padding: "1.5rem 0" }}>Sin productos vendidos en pedidos completados.</p>
+            ) : (
+              <ul className="dashboard-ranking-list">
+                {data.topProducts.map((prod, index) => (
+                  <li key={prod.variantId || prod.id || index}>
+                    <span className={`ranking-badge rank-${index + 1}`}>{index + 1}</span>
+                    <div className="ranking-details">
+                      <span className="ranking-name">{prod.name}</span>
+                      <span className="ranking-brand">
+                        {prod.brand} • {prod.salesCount} uds. vendidas
+                      </span>
+                    </div>
+                    <span className="ranking-revenue">{formatPrice(prod.revenue)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
@@ -155,43 +199,43 @@ export default function DashboardHome({ onNavigate, showSalesStats = true, allow
 
           <div className="stock-summary-pills">
             <div className="stock-pill pill-success">
-              <span className="stock-pill-count">{normalStockCount}</span>
+              <span className="stock-pill-count">{data.inventory.normal}</span>
               <span className="stock-pill-label">Stock Normal</span>
             </div>
             <div className="stock-pill pill-warning">
-              <span className="stock-pill-count">{lowStockItems.length}</span>
+              <span className="stock-pill-count">{data.inventory.low}</span>
               <span className="stock-pill-label">Stock Bajo</span>
             </div>
             <div className="stock-pill pill-danger">
-              <span className="stock-pill-count">{outOfStockItems.length}</span>
+              <span className="stock-pill-count">{data.inventory.out}</span>
               <span className="stock-pill-label">Agotados</span>
             </div>
           </div>
 
           <h4 className="stock-subtitle">Alertas que requieren reabastecimiento:</h4>
           <ul className="dashboard-stock-alert-list">
-            {[...outOfStockItems, ...lowStockItems].slice(0, 4).map((item) => (
-              <li key={item.id ?? item.product_variant_id}>
+            {data.lowStockAlerts.slice(0, 4).map((item) => (
+              <li key={item.id ?? item.variantId}>
                 <div className="stock-alert-info">
                   <span className="stock-alert-sku">SKU: {item.sku}</span>
-                  <span className="stock-alert-location">Ubicación: {item.location || "N/A"}</span>
+                  <span className="stock-alert-location">{item.productName} ({item.size}/{item.color})</span>
                 </div>
                 <div className="stock-alert-qty">
-                  <span className={item.quantity_on_hand === 0 ? "qty-out" : "qty-low"}>
-                    {item.quantity_on_hand === 0 ? "Agotado" : `${item.quantity_on_hand} en stock`}
+                  <span className={item.stock === 0 ? "qty-out" : "qty-low"}>
+                    {item.stock === 0 ? "Agotado" : `${item.stock} en stock`}
                   </span>
-                  <span className="stock-reorder-tag">Mín: {item.reorder_level}</span>
+                  <span className="stock-reorder-tag">Mín: {item.reorderLevel || 5}</span>
                 </div>
               </li>
             ))}
-            {lowStockItems.length === 0 && outOfStockItems.length === 0 && (
+            {data.lowStockAlerts.length === 0 && (
               <p className="dashboard-empty-msg">No hay alertas de stock por reabastecer.</p>
             )}
           </ul>
         </div>
       </div>
 
-      {/* SECCIÓN ORIGINAL: ÚLTIMOS PEDIDOS */}
+      {/* SECCIÓN INFERIOR: ÚLTIMOS PEDIDOS */}
       <div className="dashboard-card dashboard-section">
         <div className="dashboard-card-head">
           <h3>Últimos pedidos</h3>
@@ -200,15 +244,19 @@ export default function DashboardHome({ onNavigate, showSalesStats = true, allow
           </button>
         </div>
 
-        <ul className="dashboard-order-list">
-          {MOCK_ORDERS.slice(0, 4).map((order) => (
-            <li key={order.id}>
-              <span className="dashboard-order-id">#{order.id}</span>
-              <span className="dashboard-order-customer">{order.customer}</span>
-              <span className="dashboard-order-total">{formatPrice(order.total)}</span>
-            </li>
-          ))}
-        </ul>
+        {data.recentOrders.length === 0 ? (
+          <p className="dashboard-empty-msg" style={{ padding: "1.5rem 0" }}>No se han generado órdenes en la tienda aún.</p>
+        ) : (
+          <ul className="dashboard-order-list">
+            {data.recentOrders.map((order) => (
+              <li key={order.id}>
+                <span className="dashboard-order-id">#{order.order_number || order.id}</span>
+                <span className="dashboard-order-customer">{order.customer}</span>
+                <span className="dashboard-order-total">{formatPrice(order.total)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );

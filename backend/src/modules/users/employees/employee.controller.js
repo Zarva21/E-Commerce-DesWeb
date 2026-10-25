@@ -2,17 +2,19 @@ const employeeService = require("./employee.service.js");
 
 exports.getAll = async (req, res) => {
   try {
-    res.status(200).send(await employeeService.getAll());
+    const employees = await employeeService.getAll();
+    return res.status(200).send(employees);
   } catch (err) {
-    res.status(500).send({ message: err.message });
+    return res.status(500).send({ message: err.message });
   }
 };
 
 exports.getById = async (req, res) => {
   try {
-    res.status(200).send(await employeeService.getById(req.params.id));
+    const employee = await employeeService.getById(req.params.id);
+    return res.status(200).send(employee);
   } catch (err) {
-    res.status(err.status || 500).send({ message: err.message });
+    return res.status(err.status || 500).send({ message: err.message });
   }
 };
 
@@ -23,27 +25,33 @@ exports.create = async (req, res) => {
       return res.status(400).send({ message: "Faltan campos obligatorios." });
     }
     const employee = await employeeService.create({
-      email, password, employee_code, first_name, last_name, position
+      email,
+      password,
+      employee_code,
+      first_name,
+      last_name,
+      position,
     });
-    res.status(201).send(employee);
+    return res.status(201).send({ message: "Empleado creado exitosamente.", data: employee });
   } catch (err) {
-    res.status(err.status || 500).send({ message: err.message });
+    return res.status(err.status || 500).send({ message: err.message });
   }
 };
 
 exports.update = async (req, res) => {
   try {
-    res.status(200).send(await employeeService.update(req.params.id, req.body));
+    const updated = await employeeService.update(req.params.id, req.body);
+    return res.status(200).send({ message: "Empleado actualizado.", data: updated });
   } catch (err) {
-    res.status(err.status || 500).send({ message: err.message });
+    return res.status(err.status || 500).send({ message: err.message });
   }
 };
 
 exports.remove = async (req, res) => {
   try {
-    await employeeService.remove(req.params.id);
-    res.status(200).send({ message: "Empleado eliminado." });
+    const result = await employeeService.remove(req.params.id);
+    return res.status(200).send(result);
   } catch (err) {
-    res.status(err.status || 500).send({ message: err.message });
+    return res.status(err.status || 500).send({ message: err.message });
   }
 };

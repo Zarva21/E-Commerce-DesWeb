@@ -16,7 +16,6 @@ const initialsOf = (p) =>
   `${str(p.first_name || p.name).charAt(0)}${str(p.last_name).charAt(0)}`.toUpperCase() || "U";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const GENDERS = ["Masculino", "Femenino", "Otro", "Prefiero no decir"];
 
 const todayISO = () => {
   const d = new Date();
@@ -24,9 +23,18 @@ const todayISO = () => {
 };
 
 const formatBirthDate = (value) => {
-  if (!value) return "—";
-  const [y, m, d] = value.split("-").map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString("es-GT", { day: "numeric", month: "long", year: "numeric" });
+  if (!value) return "No registrada";
+  try {
+    const cleanDate = String(value).split("T")[0];
+    const [y, m, d] = cleanDate.split("-").map(Number);
+    return new Date(y, m - 1, d).toLocaleDateString("es-GT", {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  } catch {
+    return value;
+  }
 };
 
 const nextEmployeeCode = (employees) => {
@@ -43,25 +51,39 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
 
   const [employees, setEmployees] = useState([]);
   const [clients, setClients] = useState([]);
+  const [roles, setRoles] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [modal, setModal] = useState(null); // { type: "employee" | "client", item }
   const [detailId, setDetailId] = useState(null);
+  const [roleModalUser, setRoleModalUser] = useState(null);
+  const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [submittingRole, setSubmittingRole] = useState(false);
+
   const detail = clients.find((c) => c.id === detailId) ?? null;
 
   const loadData = async () => {
     setLoading(true);
     try {
+      const [empRes, cliRes, rolesRes] = await Promise.allSettled([
+        canSeeEmployees ? userService.getEmployees() : Promise.resolve([]),
+        userService.getClients(),
+        userService.getRoles ? userService.getRoles() : Promise.resolve([]),
+      ]);
+
       if (canSeeEmployees) {
-        const [empRes, cliRes] = await Promise.allSettled([
-          userService.getEmployees(),
-          userService.getClients(),
-        ]);
         setEmployees(empRes.status === "fulfilled" && empRes.value?.length > 0 ? empRes.value : MOCK_EMPLOYEES);
-        setClients(cliRes.status === "fulfilled" && cliRes.value?.length > 0 ? cliRes.value : MOCK_CLIENTS);
+      }
+      setClients(cliRes.status === "fulfilled" && cliRes.value?.length > 0 ? cliRes.value : MOCK_CLIENTS);
+
+      if (rolesRes.status === "fulfilled" && rolesRes.value?.length > 0) {
+        setRoles(rolesRes.value);
       } else {
-        const cliData = await userService.getClients();
-        setClients(cliData?.length > 0 ? cliData : MOCK_CLIENTS);
+        setRoles([
+          { id: 16, name: "admin" },
+          { id: 17, name: "employee" },
+          { id: 18, name: "customer" },
+        ]);
       }
     } catch (err) {
       console.warn("Fallo al consultar usuarios en backend, usando mocks:", err);
@@ -91,9 +113,7 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
     if (!EMAIL_RE.test(email)) return { error: "Ingresá un correo electrónico válido." };
     if (emailTaken(email, "employee", id)) return { error: `Ya existe un usuario con el correo "${email}".` };
     if (!employee_code) return { error: "El código de empleado es obligatorio." };
-    if (employees.some((e) => e.id !== id && norm(e.employee_code) === norm(employee_code))) {
-      return { error: `El código "${employee_code}" ya está en uso.` };
-    }
+
     if (id == null && str(form.password).length < 6) {
       return { error: "La contraseña temporal debe tener al menos 6 caracteres." };
     }
@@ -101,7 +121,6 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
     const payload = {
       first_name,
       last_name,
-      name: `${first_name} ${last_name}`,
       email,
       employee_code,
       position: str(form.position) || "Encargado de inventario",
@@ -111,17 +130,17 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
     try {
       if (id == null) {
         await userService.createEmployee(payload);
-        await loadData();
       } else {
-        setEmployees((prev) => prev.map((e) => (e.id === id ? { ...e, ...payload } : e)));
+        await userService.updateEmployee(id, payload);
       }
+      await loadData();
       return { ok: true };
     } catch (err) {
       return { error: err.response?.data?.message || err.message || "Error al procesar el colaborador." };
     }
   };
 
-  const saveClient = (form, id) => {
+  const saveClient = async (form, id) => {
     const first_name = str(form.first_name);
     const last_name = str(form.last_name);
     const email = str(form.email);
@@ -130,27 +149,26 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
 
     if (!first_name || !last_name) return { error: "El nombre y el apellido son obligatorios." };
     if (!EMAIL_RE.test(email)) return { error: "Ingresá un correo electrónico válido." };
-    if (emailTaken(email, "client", id)) return { error: `Ya existe un usuario con el correo "${email}".` };
-    if (phone && phone.replace(/\D/g, "").length < 8) {
-      return { error: "El teléfono debe tener al menos 8 dígitos." };
-    }
     if (birth_date && birth_date > todayISO()) {
       return { error: "La fecha de nacimiento no puede ser futura." };
     }
 
-    const data = {
+    const payload = {
       first_name,
       last_name,
-      name: `${first_name} ${last_name}`,
       email,
       phone,
-      birth_date,
-      gender: str(form.gender),
+      birth_date: birth_date || null,
       marketing_enabled: form.marketing_enabled === "true",
     };
 
-    setClients((prev) => prev.map((c) => (c.id === id ? { ...c, ...data } : c)));
-    return { ok: true };
+    try {
+      await userService.updateClient(id, payload);
+      await loadData();
+      return { ok: true };
+    } catch (err) {
+      return { error: err.response?.data?.message || err.message || "Error al actualizar el cliente." };
+    }
   };
 
   const openModal = (type, item = null) => {
@@ -184,31 +202,22 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
       : []),
   ];
 
-  const clientFields = (item) => {
-    const genders = item?.gender && !GENDERS.includes(item.gender) ? [...GENDERS, item.gender] : GENDERS;
-    return [
-      { name: "first_name", label: "Nombre *", required: true },
-      { name: "last_name", label: "Apellido *", required: true },
-      { name: "email", label: "Correo electrónico *", type: "email", required: true },
-      { name: "phone", label: "Teléfono", type: "tel", placeholder: "0000-0000" },
-      { name: "birth_date", label: "Fecha de nacimiento", type: "date" },
-      {
-        name: "gender",
-        label: "Género",
-        type: "select",
-        options: [{ value: "", label: "Sin especificar" }, ...genders.map((g) => ({ value: g, label: g }))],
-      },
-      {
-        name: "marketing_enabled",
-        label: "Acepta promociones por correo",
-        type: "select",
-        options: [
-          { value: "false", label: "No" },
-          { value: "true", label: "Sí" },
-        ],
-      },
-    ];
-  };
+  const clientFields = () => [
+    { name: "first_name", label: "Nombre *", required: true },
+    { name: "last_name", label: "Apellido *", required: true },
+    { name: "email", label: "Correo electrónico *", type: "email", required: true },
+    { name: "phone", label: "Teléfono", type: "tel", placeholder: "5555-5555" },
+    { name: "birth_date", label: "Fecha de nacimiento", type: "date" },
+    {
+      name: "marketing_enabled",
+      label: "Acepta promociones por correo",
+      type: "select",
+      options: [
+        { value: "false", label: "No" },
+        { value: "true", label: "Sí" },
+      ],
+    },
+  ];
 
   const initialFor = (type, item) => {
     if (type === "employee") {
@@ -234,8 +243,7 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
       last_name: item.last_name ?? "",
       email: item.email ?? "",
       phone: item.phone ?? "",
-      birth_date: item.birth_date ?? "",
-      gender: item.gender ?? "",
+      birth_date: item.birth_date ? String(item.birth_date).split("T")[0] : "",
       marketing_enabled: item.marketing_enabled ? "true" : "false",
     };
   };
@@ -243,7 +251,7 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
   const modalFields = modal
     ? modal.type === "employee"
       ? employeeFields(!modal.item)
-      : clientFields(modal.item)
+      : clientFields()
     : [];
 
   const modalTitle = !modal
@@ -259,15 +267,15 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
     const targetUserId = item.user_id || item.id;
     try {
       await userService.toggleAccountStatus(targetUserId);
-      const newStatus = item.status === "Activo" ? "Inactivo" : "Activo";
+      const newActive = !Boolean(item.is_active ?? item.status === "Activo");
 
       if (type === "employee") {
         setEmployees((prev) =>
-          prev.map((e) => (e.id === item.id ? { ...e, status: newStatus, is_active: newStatus === "Activo" } : e))
+          prev.map((e) => (e.id === item.id ? { ...e, is_active: newActive, status: newActive ? "Activo" : "Inactivo" } : e))
         );
       } else {
         setClients((prev) =>
-          prev.map((c) => (c.id === item.id ? { ...c, status: newStatus, is_active: newStatus === "Activo" } : c))
+          prev.map((c) => (c.id === item.id ? { ...c, is_active: newActive, status: newActive ? "Activo" : "Inactivo" } : c))
         );
       }
     } catch (err) {
@@ -275,21 +283,56 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
     }
   };
 
-  const deleteEmployee = (employee) => {
+  const deleteEmployee = async (employee) => {
     if (!canDelete) return;
     if (!window.confirm(`¿Eliminar a ${fullName(employee)}? Perderá el acceso al panel.`)) return;
-    setEmployees((prev) => prev.filter((e) => e.id !== employee.id));
+
+    try {
+      await userService.deleteEmployee(employee.id);
+      setEmployees((prev) => prev.filter((e) => e.id !== employee.id));
+    } catch (err) {
+      alert(err.response?.data?.message || "Error al eliminar empleado.");
+    }
   };
 
-  const deleteClient = (client) => {
+  const deleteClient = async (client) => {
     if (!canDelete) return;
     const note =
       client.totalOrders > 0
-        ? `\n\nTiene ${client.totalOrders} pedido(s) realizados. El historial de pedidos se conserva.`
+        ? `\n\nAtención: Tiene ${client.totalOrders} pedido(s) asociados.`
         : "";
     if (!window.confirm(`¿Eliminar al cliente ${fullName(client)}?${note}`)) return;
-    setClients((prev) => prev.filter((c) => c.id !== client.id));
-    if (detailId === client.id) setDetailId(null);
+
+    try {
+      await userService.deleteClient(client.id);
+      setClients((prev) => prev.filter((c) => c.id !== client.id));
+      if (detailId === client.id) setDetailId(null);
+    } catch (err) {
+      alert(err.response?.data?.message || "Error al eliminar cliente.");
+    }
+  };
+
+  // ---------------- CAMBIO DE ROL ----------------
+  const openRoleModal = (user) => {
+    setRoleModalUser(user);
+    setSelectedRoleId(user.role_id || "");
+  };
+
+  const handleSaveRole = async (e) => {
+    e.preventDefault();
+    if (!roleModalUser || !selectedRoleId) return;
+
+    setSubmittingRole(true);
+    try {
+      const targetUserId = roleModalUser.user_id || roleModalUser.id;
+      await userService.updateUserRole(targetUserId, Number(selectedRoleId));
+      await loadData();
+      setRoleModalUser(null);
+    } catch (err) {
+      alert(err.response?.data?.message || "No se pudo actualizar el rol.");
+    } finally {
+      setSubmittingRole(false);
+    }
   };
 
   return (
@@ -298,8 +341,8 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
         title="Usuarios"
         subtitle={
           tab === "employees"
-            ? "Gestión de colaboradores y accesos al panel"
-            : "Directorio de clientes registrados en la tienda"
+            ? "Gestión de colaboradores y accesos al panel administrativo"
+            : "Directorio de clientes y compradores en la tienda"
         }
         actionLabel={tab === "employees" ? "Agregar empleado" : undefined}
         onAction={tab === "employees" ? () => openModal("employee") : undefined}
@@ -320,7 +363,7 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
           className={`users-tab-btn ${tab === "clients" ? "users-tab-active" : ""}`}
           onClick={() => setActiveTab("clients")}
         >
-          Clientes Registrados ({clients.length})
+          Clientes ({clients.length})
         </button>
       </div>
 
@@ -338,14 +381,14 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
                   <tr>
                     <th>Nombre</th>
                     <th>Correo</th>
-                    <th>Cargo</th>
+                    <th>Rol / Cargo</th>
                     <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {employees.map((employee) => {
-                    const active = employee.status === "Activo" || employee.is_active;
+                    const active = employee.is_active ?? employee.status === "Activo";
                     return (
                       <tr key={employee.id}>
                         <td>
@@ -356,11 +399,14 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
                         </td>
                         <td className="data-cell-muted">{employee.email}</td>
                         <td>
-                          {employee.position || employee.role ? (
-                            <span className="user-role-badge">{employee.position || employee.role}</span>
-                          ) : (
-                            <span className="data-cell-muted">—</span>
-                          )}
+                          <span
+                            className="user-role-badge"
+                            style={{ cursor: "pointer" }}
+                            onClick={() => openRoleModal(employee)}
+                            title="Haz clic para cambiar el rol"
+                          >
+                            {employee.role_name || employee.position || "Colaborador"} ✎
+                          </span>
                         </td>
                         <td>
                           <StatusBadge label={active ? "Activo" : "Inactivo"} tone={active ? "success" : "danger"} />
@@ -414,14 +460,15 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
                   <tr>
                     <th>Cliente</th>
                     <th>Contacto</th>
-                    <th>Pedidos realizados</th>
-                    <th>Estado cuenta</th>
+                    <th>Tipo de Cuenta</th>
+                    <th>Pedidos</th>
+                    <th>Estado</th>
                     <th>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
                   {clients.map((client) => {
-                    const active = client.status === "Activo" || client.is_active;
+                    const active = client.is_active ?? client.status === "Activo";
                     return (
                       <tr key={client.id}>
                         <td>
@@ -429,9 +476,23 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
                         </td>
                         <td className="data-cell-muted">
                           <div>{client.email}</div>
-                          <small style={{ color: "var(--muted)", fontSize: "12px" }}>
+                          <small style={{ color: "#64748b", fontSize: "12px" }}>
                             {client.phone || "Sin teléfono"}
                           </small>
+                        </td>
+                        <td>
+                          <span
+                            style={{
+                              padding: "2px 8px",
+                              borderRadius: "4px",
+                              fontSize: "12px",
+                              fontWeight: 600,
+                              backgroundColor: client.is_guest ? "#fef3c7" : "#e0f2fe",
+                              color: client.is_guest ? "#92400e" : "#0369a1",
+                            }}
+                          >
+                            {client.is_guest ? "Invitado" : "Registrado"}
+                          </span>
                         </td>
                         <td>
                           <strong>{client.totalOrders ?? 0} pedidos</strong>
@@ -442,7 +503,10 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
                         <td>
                           <div className="data-actions">
                             <button type="button" className="data-action-btn" onClick={() => setDetailId(client.id)}>
-                              Ver detalle
+                              Detalle
+                            </button>
+                            <button type="button" className="data-action-btn" onClick={() => openRoleModal(client)} title="Cambiar rol">
+                              Rol
                             </button>
                             <button type="button" className="data-action-btn" onClick={() => openModal("client", client)}>
                               Editar
@@ -481,6 +545,48 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
         </>
       )}
 
+      {/* MODAL: CAMBIAR ROL */}
+      {roleModalUser && (
+        <div className="catalog-modal-overlay" onClick={() => setRoleModalUser(null)}>
+          <div className="catalog-modal-card" style={{ maxWidth: "400px" }} onClick={(e) => e.stopPropagation()}>
+            <div className="catalog-modal-header">
+              <h2>Cambiar Rol de Usuario</h2>
+              <button type="button" className="close-btn" onClick={() => setRoleModalUser(null)}>
+                ✕
+              </button>
+            </div>
+            <form onSubmit={handleSaveRole} style={{ marginTop: "1rem" }}>
+              <p style={{ margin: "0 0 1rem 0", color: "#64748b" }}>
+                Usuario: <strong>{fullName(roleModalUser)}</strong> ({roleModalUser.email})
+              </p>
+              <div className="form-group">
+                <label>Selecciona el nuevo rol:</label>
+                <select
+                  value={selectedRoleId}
+                  onChange={(e) => setSelectedRoleId(e.target.value)}
+                  required
+                >
+                  <option value="">Seleccionar rol...</option>
+                  {roles.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name.toUpperCase()} (ID #{r.id})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="modal-actions" style={{ marginTop: "1.5rem" }}>
+                <button type="button" className="btn-secondary" onClick={() => setRoleModalUser(null)}>
+                  Cancelar
+                </button>
+                <button type="submit" className="btn-primary" disabled={submittingRole}>
+                  {submittingRole ? "Guardando..." : "Asignar Rol"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* MODAL: AGREGAR / EDITAR */}
       {modal && (
         <EntityModal
@@ -510,20 +616,34 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
               </span>
               <div className="user-detail-name">
                 <strong>{fullName(detail)}</strong>
-                <StatusBadge
-                  label={detail.status === "Activo" || detail.is_active ? "Activo" : "Bloqueado"}
-                  tone={detail.status === "Activo" || detail.is_active ? "success" : "danger"}
-                />
+                <div style={{ display: "flex", gap: "6px", marginTop: "4px" }}>
+                  <StatusBadge
+                    label={detail.is_active ? "Activo" : "Bloqueado"}
+                    tone={detail.is_active ? "success" : "danger"}
+                  />
+                  <span
+                    style={{
+                      padding: "1px 6px",
+                      borderRadius: "4px",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      backgroundColor: detail.is_guest ? "#fef3c7" : "#e0f2fe",
+                      color: detail.is_guest ? "#92400e" : "#0369a1",
+                    }}
+                  >
+                    {detail.is_guest ? "Invitado" : "Registrado"}
+                  </span>
+                </div>
               </div>
             </div>
 
             <dl className="user-detail-grid">
               <div className="user-detail-item">
-                <dt>Correo</dt>
+                <dt>Correo electrónico</dt>
                 <dd>{detail.email}</dd>
               </div>
               <div className="user-detail-item">
-                <dt>Teléfono</dt>
+                <dt>Teléfono de contacto</dt>
                 <dd>{detail.phone || "—"}</dd>
               </div>
               <div className="user-detail-item">
@@ -531,16 +651,18 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
                 <dd>{formatBirthDate(detail.birth_date)}</dd>
               </div>
               <div className="user-detail-item">
-                <dt>Género</dt>
-                <dd>{detail.gender || "—"}</dd>
+                <dt>Rol en sistema</dt>
+                <dd>{detail.role_name || "customer"}</dd>
               </div>
               <div className="user-detail-item">
                 <dt>Pedidos realizados</dt>
-                <dd>{detail.totalOrders ?? 0}</dd>
+                <dd>
+                  <strong>{detail.totalOrders ?? 0} pedidos</strong>
+                </dd>
               </div>
               <div className="user-detail-item">
                 <dt>Promociones por correo</dt>
-                <dd>{detail.marketing_enabled ? "Las acepta" : "No las acepta"}</dd>
+                <dd>{detail.marketing_enabled ? "Acepta promociones" : "No suscrito"}</dd>
               </div>
             </dl>
 
@@ -549,7 +671,7 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
                 Cerrar
               </button>
               <button type="button" className="btn-primary" onClick={() => openModal("client", detail)}>
-                Editar
+                Editar Información
               </button>
             </div>
           </div>

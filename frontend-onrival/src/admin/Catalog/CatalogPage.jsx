@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import PageHeader from "../ui/PageHeader";
 import StatusBadge from "../ui/StatusBadge";
 import CategoryCascader from "./CategoryCascader";
-import ProductImageField from "./ProductImageField";
 import EntityTable from "./EntityTable";
 import EntityModal from "./EntityModal";
 import CategorySections, { flattenTree } from "./CategorySections";
@@ -18,16 +17,12 @@ const formatPrice = (value) =>
     style: "currency",
     currency: "GTQ",
     minimumFractionDigits: 2,
-  }).format(value);
+  }).format(value || 0);
 
 const toId = (v) => (v === "" || v == null ? null : Number(v));
 const str = (v) => String(v ?? "").trim();
 const sameId = (a, b) => a != null && b != null && String(a) === String(b);
-const nextId = (list) => list.reduce((max, x) => Math.max(max, Number(x.id) || 0), 0) + 1;
-const nameTaken = (list, name, ignoreId) =>
-  list.some((x) => !sameId(x.id, ignoreId) && str(x.name).toLowerCase() === name.toLowerCase());
 
-// [id, ...ids de todos sus descendientes] (misma lógica que getDescendantIds del backend)
 function getDescendantIds(list, rootId) {
   const out = [String(rootId)];
   const stack = [String(rootId)];
@@ -43,7 +38,6 @@ function getDescendantIds(list, rootId) {
   return out;
 }
 
-// Quita una categoría y sus descendientes del árbol (para el selector de "categoría padre")
 const pruneTree = (nodes, id) =>
   nodes
     .filter((n) => !sameId(n.id, id))
@@ -64,39 +58,30 @@ const EMPTY_PRODUCT_FORM = {
   category_id: "",
   supplier_id: "",
   is_active: true,
-  image: "", // URL o data URL de la imagen principal
 };
 
 const EMPTY_VARIANT_FORM = { sku: "", color: "", size: "", weight: "", barcode: "" };
 
-// Imagen principal del producto (o la primera si ninguna está marcada)
-const primaryImageOf = (product) => product.images?.find((i) => i.is_primary) ?? product.images?.[0];
-
 const VariantIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 3 3 8l9 5 9-5-9-5Z" />
     <path d="m3 13 9 5 9-5" />
   </svg>
 );
 
 const PlusIcon = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" aria-hidden="true">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round">
     <path d="M12 5v14M5 12h14" />
   </svg>
 );
 
 const PencilIcon = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M12 20h9" />
     <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
   </svg>
 );
 
-
-// canCreate: crear productos. canToggle: activar/desactivar. canDelete: eliminar
-// productos y variantes. canManageEntities: crear/editar/eliminar marcas, categorías
-// y proveedores. Con todo en false (rol empleado) solo puede editar productos
-// (datos, imagen y variantes) y ver las demás tablas.
 export default function CatalogPage({
   canCreate = true,
   canToggle = true,
@@ -105,14 +90,12 @@ export default function CatalogPage({
 }) {
   const [activeTab, setActiveTab] = useState("products");
 
-  // Estados de datos (desde backend)
   const [products, setProducts] = useState([]);
   const [brands, setBrands] = useState([]);
   const [categories, setCategories] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filtro
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modales Producto
@@ -122,9 +105,9 @@ export default function CatalogPage({
   const [submitting, setSubmitting] = useState(false);
   const [modalError, setModalError] = useState("");
 
-  // Manejo de archivos para AWS S3
+  // Manejo de hasta 5 fotos en S3
   const [selectedFiles, setSelectedFiles] = useState([]);
-  const [filePreviews, setFilePreviews] = useState([]);
+  const [existingImages, setExistingImages] = useState([]);
 
   // Modal de variantes
   const [variantsProductId, setVariantsProductId] = useState(null);
@@ -182,6 +165,42 @@ export default function CatalogPage({
     setEntityError("");
   };
 
+  // ---------------- GESTIÓN DE FOTOGRAFÍAS (HASTA 5) ----------------
+  const handleImageChange = (e) => {
+    const files = Array.from(e.target.files);
+    if (!files.length) return;
+
+    const totalCurrent = existingImages.length + selectedFiles.length;
+    if (totalCurrent + files.length > 5) {
+      alert(`Solo puedes tener un máximo de 5 fotos. Actualmente ya tienes ${totalCurrent}.`);
+      return;
+    }
+
+    const newFiles = files.map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+
+    setSelectedFiles((prev) => [...prev, ...newFiles]);
+    e.target.value = "";
+  };
+
+  const removeNewFile = (index) => {
+    setSelectedFiles((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  const removeExistingImage = async (imageId) => {
+    if (!window.confirm("¿Deseas eliminar esta fotografía del producto?")) return;
+    try {
+      if (mediaService.deleteProductImage) {
+        await mediaService.deleteProductImage(imageId);
+      }
+      setExistingImages((prev) => prev.filter((img) => img.id !== imageId));
+    } catch (err) {
+      alert("Error al eliminar la imagen: " + (err.message || ""));
+    }
+  };
+
   // ---------------- PRODUCTOS ----------------
   const handleToggleProductStatus = async (id) => {
     if (!canToggle) return;
@@ -195,24 +214,18 @@ export default function CatalogPage({
     }
   };
 
-  const handleDeleteProduct = (item) => {
+  const handleDeleteProduct = async (item) => {
     if (!canDelete) return;
-    if (!window.confirm(`¿Eliminar "${item.name}"? También se eliminarán sus variantes y fotos.`)) return;
-    setProducts((prev) => prev.filter((p) => p.id !== item.id));
-  };
-
-  const handleImageChange = (e) => {
-    const files = Array.from(e.target.files);
-    if (!files.length) return;
-
-    if (files.length > 5) {
-      alert("Puedes seleccionar un máximo de 5 fotografías.");
+    if (!window.confirm(`¿Eliminar "${item.name}"? También se eliminarán sus variantes y fotos asociadas.`)) {
       return;
     }
 
-    setSelectedFiles(files);
-    const previews = files.map((f) => URL.createObjectURL(f));
-    setFilePreviews(previews);
+    try {
+      await catalogService.deleteProduct(item.id);
+      setProducts((prev) => prev.filter((p) => p.id !== item.id));
+    } catch (err) {
+      alert(err.response?.data?.message || "No se pudo eliminar el producto de la base de datos.");
+    }
   };
 
   const openCreateModal = () => {
@@ -224,7 +237,7 @@ export default function CatalogPage({
       supplier_id: suppliers[0]?.id || "",
     });
     setSelectedFiles([]);
-    setFilePreviews([]);
+    setExistingImages([]);
     setModalError("");
     setIsCreatingProduct(true);
   };
@@ -240,10 +253,9 @@ export default function CatalogPage({
       category_id: product.category_id || "",
       supplier_id: product.supplier_id || "",
       is_active: product.is_active,
-      image: primaryImageOf(product)?.image_url ?? "",
     });
     setSelectedFiles([]);
-    setFilePreviews([]);
+    setExistingImages(product.images || []);
     setModalError("");
     setIsCreatingProduct(true);
   };
@@ -252,7 +264,7 @@ export default function CatalogPage({
     setIsCreatingProduct(false);
     setSelectedProduct(null);
     setSelectedFiles([]);
-    setFilePreviews([]);
+    setExistingImages([]);
     setModalError("");
   };
 
@@ -279,7 +291,6 @@ export default function CatalogPage({
     setSubmitting(true);
     try {
       let savedProduct;
-
       if (selectedProduct) {
         savedProduct = await catalogService.updateProduct(selectedProduct.id, payload);
       } else {
@@ -289,7 +300,9 @@ export default function CatalogPage({
       const targetId = savedProduct?.id || selectedProduct?.id;
 
       if (selectedFiles.length > 0 && targetId) {
-        await mediaService.uploadProductImages(targetId, selectedFiles, true);
+        const rawFiles = selectedFiles.map((item) => item.file);
+        const shouldSetPrimary = existingImages.length === 0;
+        await mediaService.uploadProductImages(targetId, rawFiles, shouldSetPrimary);
       }
 
       await loadData();
@@ -300,6 +313,7 @@ export default function CatalogPage({
       setSubmitting(false);
     }
   };
+
   // ---------------- VARIANTES ----------------
   const resetVariantForm = () => {
     setEditingVariantId(null);
@@ -329,16 +343,25 @@ export default function CatalogPage({
     setVariantError("");
   };
 
-  const handleDeleteVariant = (v) => {
+  const handleDeleteVariant = async (v) => {
     if (!canDelete) return;
     if (!window.confirm(`¿Eliminar la variante "${v.sku}"?`)) return;
 
-    setProducts((prev) =>
-      prev.map((p) =>
-        p.id === variantsProductId ? { ...p, variants: p.variants.filter((x) => x.id !== v.id) } : p
-      )
-    );
-    if (editingVariantId === v.id) resetVariantForm();
+    try {
+      if (catalogService.deleteVariant) {
+        await catalogService.deleteVariant(variantsProductId, v.id);
+      }
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === variantsProductId
+            ? { ...p, variants: p.variants.filter((x) => x.id !== v.id) }
+            : p
+        )
+      );
+      if (editingVariantId === v.id) resetVariantForm();
+    } catch (err) {
+      setVariantError(err.response?.data?.message || "No se pudo eliminar la variante de la base de datos.");
+    }
   };
 
   const setVariantField = (name, value) => {
@@ -403,112 +426,76 @@ export default function CatalogPage({
     }
   };
 
-  // ---------------- MARCAS / CATEGORÍAS / PROVEEDORES ----------------
-  // Cada guardado devuelve { ok } o { error } (mismas reglas que el backend).
-  // TODO: con backend, cada uno se convierte en una llamada a la API.
-  const saveBrand = (form, id) => {
-    const name = str(form.name);
-    if (!name) return { error: "El nombre de la marca es obligatorio." };
-
-    const current = id != null ? brands.find((b) => sameId(b.id, id)) : null;
-    if ((!current || name !== current.name) && nameTaken(brands, name, id)) {
-      return { error: `Ya existe una marca con el nombre "${name}".` };
-    }
-
-    const data = { name, description: str(form.description) };
-    setBrands((prev) =>
-      current
-        ? prev.map((b) => (sameId(b.id, id) ? { ...b, ...data } : b))
-        : [...prev, { id: nextId(prev), ...data }]
-    );
-    return { ok: true };
-  };
-
-  const saveCategory = (form, id) => {
-    const name = str(form.name);
-    if (!name) return { error: "El nombre de la categoría es obligatorio." };
-
-    const current = id != null ? categories.find((c) => sameId(c.id, id)) : null;
-    if ((!current || name !== current.name) && nameTaken(categories, name, id)) {
-      return { error: `Ya existe una categoría llamada "${name}".` };
-    }
-
-    const parent = toId(form.parent_category_id);
-    if (parent === null) return { error: "Seleccioná la categoría padre." };
-    if (!categories.some((c) => sameId(c.id, parent))) {
-      return { error: "La categoría padre indicada no existe." };
-    }
-    if (current) {
-      if (sameId(parent, id)) return { error: "Una categoría no puede ser padre de sí misma." };
-      if (getDescendantIds(categories, id).includes(String(parent))) {
-        return { error: "No puedes mover una categoría dentro de una de sus descendientes." };
-      }
-    }
-
-    const data = { name, description: str(form.description), parent_category_id: parent };
-    setCategories((prev) =>
-      current
-        ? prev.map((c) => (sameId(c.id, id) ? { ...c, ...data } : c))
-        : [...prev, { id: nextId(prev), ...data }]
-    );
-    return { ok: true };
-  };
-
-  const saveSupplier = (form, id) => {
-    const name = str(form.name);
-    if (!name) return { error: "El nombre del proveedor es obligatorio." };
-
-    const data = { name, contact_email: str(form.contact_email), phone: str(form.phone) };
-    const current = id != null ? suppliers.find((s) => sameId(s.id, id)) : null;
-    setSuppliers((prev) =>
-      current
-        ? prev.map((s) => (sameId(s.id, id) ? { ...s, ...data } : s))
-        : [...prev, { id: nextId(prev), ...data }]
-    );
-    return { ok: true };
-  };
-
+  // ---------------- MARCAS / CATEGORÍAS / PROVEEDORES (PERSISTENCIA REAL EN BD) ----------------
   const openEntityModal = (type, item = null, preset = {}) => {
     if (!canManageEntities) return;
     setEntityError("");
     setEntityModal({ type, item, preset });
   };
 
-  const handleSaveEntity = (form) => {
+  const handleSaveEntity = async (form) => {
     const { type, item } = entityModal;
     const id = item?.id ?? null;
-    if (type === "brand") return saveBrand(form, id);
-    if (type === "category") return saveCategory(form, id);
-    return saveSupplier(form, id);
+
+    try {
+      if (type === "brand") {
+        const payload = { name: form.name.trim(), description: form.description?.trim() };
+        if (id) {
+          await catalogService.updateBrand(id, payload);
+        } else {
+          await catalogService.createBrand(payload);
+        }
+      } else if (type === "category") {
+        const payload = {
+          name: form.name.trim(),
+          description: form.description?.trim(),
+          parent_category_id: toId(form.parent_category_id),
+        };
+        if (id) {
+          await catalogService.updateCategory(id, payload);
+        } else {
+          await catalogService.createCategory(payload);
+        }
+      } else if (type === "supplier") {
+        const payload = {
+          name: form.name.trim(),
+          contact_email: form.contact_email?.trim(),
+          phone: form.phone?.trim(),
+        };
+        if (id) {
+          await catalogService.updateSupplier(id, payload);
+        } else {
+          await catalogService.createSupplier(payload);
+        }
+      }
+
+      await loadData();
+      return { ok: true };
+    } catch (err) {
+      return { error: err.response?.data?.message || err.message || "Error al guardar los cambios en la base de datos." };
+    }
   };
 
-  const handleDeleteEntity = (type, item) => {
+  const handleDeleteEntity = async (type, item) => {
     if (!canManageEntities) return;
 
-    let error = "";
-    if (type === "brand") {
-      const n = countBy("brand_id", item.id);
-      if (n > 0) error = `No se puede eliminar: la marca tiene ${n} producto(s) asociado(s).`;
-    } else if (type === "supplier") {
-      const n = countBy("supplier_id", item.id);
-      if (n > 0) error = `No se puede eliminar: el proveedor tiene ${n} producto(s) asociado(s).`;
-    } else {
-      const children = categories.filter((c) => sameId(c.parent_category_id, item.id)).length;
-      const n = countBy("category_id", item.id);
-      if (children > 0) error = `No se puede eliminar: la categoría tiene ${children} subcategoría(s).`;
-      else if (n > 0) error = `No se puede eliminar: la categoría tiene ${n} producto(s).`;
-    }
-
-    if (error) {
-      setEntityError(error);
-      return;
-    }
     if (!window.confirm(ENTITY_LABELS[type].confirm(item.name))) return;
 
     setEntityError("");
-    if (type === "brand") setBrands((prev) => prev.filter((b) => !sameId(b.id, item.id)));
-    else if (type === "supplier") setSuppliers((prev) => prev.filter((s) => !sameId(s.id, item.id)));
-    else setCategories((prev) => prev.filter((c) => !sameId(c.id, item.id)));
+    try {
+      if (type === "brand") {
+        await catalogService.deleteBrand(item.id);
+        setBrands((prev) => prev.filter((b) => !sameId(b.id, item.id)));
+      } else if (type === "category") {
+        await catalogService.deleteCategory(item.id);
+        setCategories((prev) => prev.filter((c) => !sameId(c.id, item.id)));
+      } else if (type === "supplier") {
+        await catalogService.deleteSupplier(item.id);
+        setSuppliers((prev) => prev.filter((s) => !sameId(s.id, item.id)));
+      }
+    } catch (err) {
+      setEntityError(err.response?.data?.message || "No se pudo eliminar el elemento.");
+    }
   };
 
   const entityFields = (type, item, preset) => {
@@ -703,12 +690,6 @@ export default function CatalogPage({
                             type="button"
                             className={`variant-btn ${variantCount === 0 ? "variant-btn-empty" : ""}`}
                             onClick={() => openVariantsModal(item)}
-                            title={
-                              variantCount === 0
-                                ? "Este producto aún no tiene variantes"
-                                : `Tallas: ${variantSizes || "sin talla definida"}`
-                            }
-                            aria-label={`Gestionar variantes de ${item.name}`}
                           >
                             {variantCount === 0 ? <PlusIcon /> : <VariantIcon />}
                             <span>
@@ -748,7 +729,6 @@ export default function CatalogPage({
                                 className="data-action-btn data-action-btn-icon data-action-btn-danger"
                                 onClick={() => handleDeleteProduct(item)}
                                 title="Eliminar producto"
-                                aria-label={`Eliminar ${item.name}`}
                               >
                                 <TrashIcon />
                               </button>
@@ -825,19 +805,7 @@ export default function CatalogPage({
         </>
       )}
 
-      {/* MODAL MARCA / CATEGORÍA / PROVEEDOR */}
-      {entityModal && (
-        <EntityModal
-          key={`${entityModal.type}-${entityModal.item?.id ?? "new"}-${entityModal.preset?.parent_category_id ?? ""}`}
-          title={entityModalTitle}
-          fields={entityFormFields}
-          initial={entityInitial}
-          onSave={handleSaveEntity}
-          onClose={() => setEntityModal(null)}
-        />
-      )}
-
-      {/* MODAL CREAR / EDITAR PRODUCTO */}
+      {/* MODAL CREAR / EDITAR PRODUCTO CON SOPORTE HASTA 5 FOTOS */}
       {isCreatingProduct && (
         <div className="catalog-modal-overlay" onClick={closeProductModal}>
           <div className="catalog-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -934,36 +902,106 @@ export default function CatalogPage({
                 />
               </div>
 
-              {/* SECCIÓN DE SUBIDA DE IMÁGENES A S3 */}
+              {/* SECCIÓN DE GESTIÓN Y SUBIDA DE IMÁGENES A S3 */}
               <div className="form-group" style={{ borderTop: "1px solid #e2e8f0", paddingTop: "1rem" }}>
-                <label style={{ fontWeight: 600 }}>Fotografías del Producto (AWS S3)</label>
-                <input
-                  type="file"
-                  accept="image/png, image/jpeg, image/webp"
-                  multiple
-                  onChange={handleImageChange}
-                  style={{ marginTop: "0.5rem" }}
-                />
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label style={{ fontWeight: 600 }}>Fotografías del Producto (AWS S3)</label>
+                  <span style={{ fontSize: "13px", color: "#64748b" }}>
+                    {existingImages.length + selectedFiles.length} de 5 permitidas
+                  </span>
+                </div>
+
+                {existingImages.length + selectedFiles.length < 5 && (
+                  <input
+                    type="file"
+                    accept="image/png, image/jpeg, image/webp"
+                    multiple
+                    onChange={handleImageChange}
+                    style={{ marginTop: "0.5rem" }}
+                  />
+                )}
+
                 <small className="data-cell-muted" style={{ display: "block", marginTop: "4px" }}>
-                  Máximo 5 fotos. La primera se guardará como portada.
+                  La primera imagen marcada será la portada principal del producto en la tienda.
                 </small>
 
-                {filePreviews.length > 0 && (
-                  <div style={{ display: "flex", gap: "10px", marginTop: "10px", flexWrap: "wrap" }}>
-                    {filePreviews.map((src, idx) => (
-                      <div
-                        key={idx}
+                {/* Galería de imágenes (Guardadas en S3 + Nuevas por subir) */}
+                <div style={{ display: "flex", gap: "12px", marginTop: "12px", flexWrap: "wrap" }}>
+                  {/* Imágenes ya guardadas */}
+                  {existingImages.map((img, idx) => (
+                    <div
+                      key={`saved-${img.id || idx}`}
+                      style={{
+                        width: "80px",
+                        height: "80px",
+                        borderRadius: "8px",
+                        overflow: "hidden",
+                        border: img.is_primary ? "2px solid #2563eb" : "1px solid #cbd5e1",
+                        position: "relative",
+                        background: "#f8fafc",
+                      }}
+                    >
+                      <img src={img.image_url} alt="Producto" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      {img.is_primary && (
+                        <span
+                          style={{
+                            position: "absolute",
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            background: "#2563eb",
+                            color: "#fff",
+                            fontSize: "10px",
+                            textAlign: "center",
+                          }}
+                        >
+                          Portada
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeExistingImage(img.id)}
                         style={{
-                          width: "60px",
-                          height: "60px",
-                          borderRadius: "6px",
+                          position: "absolute",
+                          top: 2,
+                          right: 2,
+                          background: "rgba(220, 38, 38, 0.85)",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "50%",
+                          width: "20px",
+                          height: "20px",
+                          cursor: "pointer",
+                          fontSize: "11px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                        title="Eliminar foto"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Nuevas fotos locales seleccionadas */}
+                  {selectedFiles.map((item, idx) => {
+                    const isFirstNewAndNoSaved = existingImages.length === 0 && idx === 0;
+                    return (
+                      <div
+                        key={`new-${idx}`}
+                        style={{
+                          width: "80px",
+                          height: "80px",
+                          borderRadius: "8px",
                           overflow: "hidden",
-                          border: idx === 0 ? "2px solid #2563eb" : "1px solid #cbd5e1",
+                          border: isFirstNewAndNoSaved ? "2px solid #2563eb" : "1px dashed #3b82f6",
                           position: "relative",
+                          background: "#eff6ff",
                         }}
                       >
-                        <img src={src} alt="Vista previa" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        {idx === 0 && (
+                        <img src={item.preview} alt="Nueva foto" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        {isFirstNewAndNoSaved && (
                           <span
                             style={{
                               position: "absolute",
@@ -972,17 +1010,40 @@ export default function CatalogPage({
                               right: 0,
                               background: "#2563eb",
                               color: "#fff",
-                              fontSize: "9px",
+                              fontSize: "10px",
                               textAlign: "center",
                             }}
                           >
                             Portada
                           </span>
                         )}
+                        <button
+                          type="button"
+                          onClick={() => removeNewFile(idx)}
+                          style={{
+                            position: "absolute",
+                            top: 2,
+                            right: 2,
+                            background: "rgba(220, 38, 38, 0.85)",
+                            color: "#fff",
+                            border: "none",
+                            borderRadius: "50%",
+                            width: "20px",
+                            height: "20px",
+                            cursor: "pointer",
+                            fontSize: "11px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                          title="Quitar foto"
+                        >
+                          ✕
+                        </button>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="modal-actions">
@@ -998,7 +1059,7 @@ export default function CatalogPage({
         </div>
       )}
 
-      {/* MODAL GESTIÓN DE VARIANTES Y SKUs */}
+      {/* MODAL DE VARIANTES */}
       {editingVariantProduct && (
         <div className="catalog-modal-overlay" onClick={closeVariantsModal}>
           <div className="catalog-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -1016,56 +1077,50 @@ export default function CatalogPage({
               </div>
 
               {(!editingVariantProduct.variants || editingVariantProduct.variants.length === 0) ? (
-                <p className="variant-empty">Este producto aún no tiene variantes. Agregá la primera abajo.</p>
+                <p className="variant-empty">Este producto aún no tiene variantes. Agrega la primera abajo.</p>
               ) : (
                 <ul className="variant-cards">
-                  {editingVariantProduct.variants.map((v) => {
-                    const hasWeight = v.weight != null && v.weight !== "";
-                    return (
-                      <li
-                        key={v.id}
-                        className={`variant-card ${v.id === editingVariantId ? "variant-card-active" : ""}`}
-                      >
-                        <div className="variant-card-main">
-                          <span className="variant-card-sku">{v.sku}</span>
-                          <div className="variant-card-tags">
-                            <span className={`variant-tag ${v.size ? "" : "variant-tag-empty"}`}>
-                              <b>Talla</b> {v.size || "—"}
-                            </span>
-                            <span className={`variant-tag ${v.color ? "" : "variant-tag-empty"}`}>
-                              <b>Color</b> {v.color || "—"}
-                            </span>
-                            <span className={`variant-tag ${hasWeight ? "" : "variant-tag-empty"}`}>
-                              <b>Peso</b> {hasWeight ? `${v.weight} kg` : "—"}
-                            </span>
-                          </div>
+                  {editingVariantProduct.variants.map((v) => (
+                    <li
+                      key={v.id}
+                      className={`variant-card ${v.id === editingVariantId ? "variant-card-active" : ""}`}
+                    >
+                      <div className="variant-card-main">
+                        <span className="variant-card-sku">{v.sku}</span>
+                        <div className="variant-card-tags">
+                          <span className={`variant-tag ${v.size ? "" : "variant-tag-empty"}`}>
+                            <b>Talla</b> {v.size || "—"}
+                          </span>
+                          <span className={`variant-tag ${v.color ? "" : "variant-tag-empty"}`}>
+                            <b>Color</b> {v.color || "—"}
+                          </span>
+                          <span className={`variant-tag ${v.weight ? "" : "variant-tag-empty"}`}>
+                            <b>Peso</b> {v.weight ? `${v.weight} kg` : "—"}
+                          </span>
                         </div>
+                      </div>
 
-                        <div className="variant-card-actions">
+                      <div className="variant-card-actions">
+                        <button
+                          type="button"
+                          className="variant-edit-btn"
+                          onClick={() => startEditVariant(v)}
+                        >
+                          <PencilIcon /> Editar
+                        </button>
+                        {canDelete && (
                           <button
                             type="button"
-                            className="variant-edit-btn"
-                            onClick={() => startEditVariant(v)}
-                            aria-label={`Editar la variante ${v.sku}`}
+                            className="variant-icon-btn variant-icon-btn-danger"
+                            onClick={() => handleDeleteVariant(v)}
+                            title="Eliminar variante"
                           >
-                            <PencilIcon />
-                            Editar
+                            <TrashIcon />
                           </button>
-                          {canDelete && (
-                            <button
-                              type="button"
-                              className="variant-icon-btn variant-icon-btn-danger"
-                              onClick={() => handleDeleteVariant(v)}
-                              title="Eliminar variante"
-                              aria-label={`Eliminar la variante ${v.sku}`}
-                            >
-                              <TrashIcon />
-                            </button>
-                          )}
-                        </div>
-                      </li>
-                    );
-                  })}
+                        )}
+                      </div>
+                    </li>
+                  ))}
                 </ul>
               )}
             </div>
@@ -1118,7 +1173,6 @@ export default function CatalogPage({
                   <label>Peso (kg)</label>
                   <input
                     type="number"
-                    min="0"
                     step="0.01"
                     placeholder="Ej: 0.45"
                     value={variantForm.weight}
@@ -1143,6 +1197,18 @@ export default function CatalogPage({
             </form>
           </div>
         </div>
+      )}
+
+      {/* MODAL DE MARCA / CATEGORÍA / PROVEEDOR */}
+      {entityModal && (
+        <EntityModal
+          key={`${entityModal.type}-${entityModal.item?.id ?? "new"}-${entityModal.preset?.parent_category_id ?? ""}`}
+          title={entityModalTitle}
+          fields={entityFormFields}
+          initial={entityInitial}
+          onSave={handleSaveEntity}
+          onClose={() => setEntityModal(null)}
+        />
       )}
     </div>
   );

@@ -29,8 +29,23 @@ exports.updateStatus = async (req, res) => {
 
 exports.getMyOrders = async (req, res) => {
   try {
-    const orders = await orderService.getOrdersByUserId(req.userId);
-    res.status(200).send(orders);
+    const userId = req.userId; // Inyectado por verifyToken
+    if (!userId) {
+      return res.status(401).send({ message: "Usuario no autenticado." });
+    }
+    const orders = await orderService.getOrdersByUserId(userId);
+    return res.status(200).send({ data: orders });
+  } catch (err) {
+    return res.status(err.status || 500).send({ message: err.message });
+  }
+};
+
+exports.collectCash = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const employeeId = req.userId || null;
+    const result = await orderService.collectCashPayment(id, employeeId);
+    res.status(200).send(result);
   } catch (err) {
     res.status(err.status || 500).send({ message: err.message });
   }

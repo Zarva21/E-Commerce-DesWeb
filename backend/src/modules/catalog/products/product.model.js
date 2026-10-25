@@ -29,13 +29,22 @@ module.exports = (sequelize, Sequelize) => {
       allowNull: false
     },
     is_active: {
-      type: Sequelize.BOOLEAN,
-      defaultValue: true
+        type: Sequelize.BOOLEAN,
+        defaultValue: true,
+      },
+    },
+    {
+      timestamps: true,
+      underscored: true,
+      paranoid: true,
+      
+      indexes: [
+        {
+          name: "idx_products_is_active_category",
+          fields: ["is_active", "category_id"],
+        },
+      ],
     }
-  }, {
-    timestamps: true,
-    underscored: true,
-    paranoid: true
-  });
+  );
   return Product;
 };

@@ -24,8 +24,9 @@ const formatDate = (value) => {
 export default function OrdersPage({ onSelectOrder }) {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [collectingId, setCollectingId] = useState(null);
 
-  useEffect(() => {
+  const fetchOrders = () => {
     setLoading(true);
     orderAdminService
       .getAll()
@@ -38,7 +39,31 @@ export default function OrdersPage({ onSelectOrder }) {
         setOrders(MOCK_ORDERS);
       })
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchOrders();
   }, []);
+
+  const handleQuickCollect = async (orderId) => {
+    if (!window.confirm("¿Confirmas que recibiste el pago en efectivo de este pedido?")) return;
+
+    setCollectingId(orderId);
+    try {
+      await orderAdminService.collectCash(orderId);
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === orderId
+            ? { ...o, payment_status: "completed", status: o.status === "pending_payment" ? "paid" : o.status }
+            : o
+        )
+      );
+    } catch (err) {
+      alert(err.response?.data?.message || "Error al liquidar cobro.");
+    } finally {
+      setCollectingId(null);
+    }
+  };
 
   return (
     <div>
@@ -61,59 +86,90 @@ export default function OrdersPage({ onSelectOrder }) {
                 <th>Método</th>
                 <th>Cobro</th>
                 <th>Logística</th>
-                <th></th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody>
               {orders.map((order) => {
-                const isPaid =
-                  order.payment_status === "completed" || order.status === "paid";
+                const isCash = String(order.payment_method || "").toLowerCase() === "cash" || order.payment_method === "contra_entrega";
+                const isPaid = order.payment_status === "completed";
                 const orderKey = order.order_number || order.id;
 
                 return (
                   <tr key={order.id}>
-                    <td className="data-cell-title">#{orderKey}</td>
-                    <td>
-                        <div>
-                          <strong>{order.customer || "Cliente Invitado"}</strong>
-                        </div>
-                        <small className="data-cell-muted">
-                          {order.phone !== "—" ? order.phone : order.email}
-                        </small>
-                      </td>
-
-                      <td className="data-cell-muted">
-                        {formatDate(order.date || order.created_at)}
-                      </td>
-
-                      <td>
-                        <strong>{formatPrice(order.total)}</strong>
-                      </td>
-
-                      {/* Columna Método */}
-                      <td>
-                        <span style={{ fontWeight: 600 }}>
-                          {String(order.payment_method || "").toLowerCase() === "stripe"
-                            ? "Tarjeta (Stripe)"
-                            : "Efectivo (Contra entrega)"}
+                    <td className="data-cell-title">
+                      #{orderKey}
+                      {order.coupon_code && (
+                        <span
+                          style={{
+                            display: "block",
+                            fontSize: "11px",
+                            color: "#166534",
+                            backgroundColor: "#dcfce7",
+                            padding: "2px 5px",
+                            borderRadius: "4px",
+                            width: "fit-content",
+                            marginTop: "3px",
+                            fontWeight: 600,
+                          }}
+                        >
+                          Cupón: {order.coupon_code}
                         </span>
-                      </td>
+                      )}
+                    </td>
 
-                      {/* Columna Cobro */}
-                      <td>
-                        <StatusBadge
-                          label={order.payment_status === "completed" ? "Cobrado" : "Por Cobrar"}
-                          tone={order.payment_status === "completed" ? "success" : "warning"}
-                        />
-                      </td>
+                    <td>
+                      <div>
+                        <strong>{order.customer || "Cliente Invitado"}</strong>
+                      </div>
+                      <small className="data-cell-muted">
+                        {order.phone !== "—" ? order.phone : order.email}
+                      </small>
+                    </td>
+
+                    <td className="data-cell-muted">
+                      {formatDate(order.date || order.created_at)}
+                    </td>
+
+                    <td>
+                      <strong>{formatPrice(order.total)}</strong>
+                    </td>
+
+                    <td>
+                      <span style={{ fontWeight: 500, fontSize: "0.9rem" }}>
+                        {isCash ? "Efectivo (Contra entrega)" : "Tarjeta (Stripe)"}
+                      </span>
+                    </td>
+
+                    <td>
+                      <StatusBadge
+                        label={isPaid ? "Cobrado" : "Por Cobrar"}
+                        tone={isPaid ? "success" : "warning"}
+                      />
+                    </td>
+
                     <td>
                       <StatusBadge
                         label={orderStatusLabel(order.status)}
                         tone={orderStatusTone(order.status)}
                       />
                     </td>
+
                     <td>
-                      <div className="data-actions">
+                      <div className="data-actions" style={{ display: "flex", gap: "6px" }}>
+                        {/* Botón rápido de cobro si es efectivo y aún no está cobrado */}
+                        {isCash && !isPaid && order.status !== "cancelled" && (
+                          <button
+                            type="button"
+                            className="data-action-btn"
+                            disabled={collectingId === order.id}
+                            onClick={() => handleQuickCollect(order.id)}
+                            style={{ backgroundColor: "#10b981", color: "#fff", border: "none" }}
+                          >
+                            {collectingId === order.id ? "..." : "Cobrar"}
+                          </button>
+                        )}
+
                         <button
                           type="button"
                           className="data-action-btn"
@@ -131,7 +187,7 @@ export default function OrdersPage({ onSelectOrder }) {
         )}
 
         {!loading && orders.length === 0 && (
-          <p className="data-empty">Todavía no hay pedidos.</p>
+          <p className="data-empty">Todavía no hay pedidos registrados.</p>
         )}
       </div>
     </div>

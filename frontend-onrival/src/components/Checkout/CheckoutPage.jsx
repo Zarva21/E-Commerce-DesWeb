@@ -39,9 +39,11 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
   const [couponError, setCouponError] = useState(null);
   const [appliedCoupon, setAppliedCoupon] = useState(null); // { code, discount_amount, coupon_id }
 
-  // Cálculo del total con descuento
-  const discount = appliedCoupon ? appliedCoupon.discount_amount : 0;
-  const total = Math.max(0, subtotal - discount) + SHIPPING_COST;
+// Cálculo del total con descuento e IVA (12%)
+  const discount = appliedCoupon ? Number(appliedCoupon.discount_amount) : 0;
+  const taxableBase = Math.max(0, subtotal - discount);
+  const tax = Number((taxableBase * 0.12).toFixed(2));
+  const total = Number((taxableBase + tax + SHIPPING_COST).toFixed(2));
 
   // Manejador de validación de cupón
   const handleApplyCoupon = async (e) => {
@@ -406,6 +408,12 @@ function CheckoutFormContent({ shippingData, onBack, onFinish }) {
               <span>-{formatPrice(appliedCoupon.discount_amount)}</span>
             </div>
           )}
+
+          {/* FILA DE IMPUESTOS (IVA 12%) */}
+          <div className="checkout-summary-row">
+            <span>IVA (12%)</span>
+            <span>{formatPrice(tax)}</span>
+          </div>
 
           <div className="checkout-summary-row">
             <span>Envío</span>

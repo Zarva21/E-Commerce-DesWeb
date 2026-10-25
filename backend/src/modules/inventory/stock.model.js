@@ -14,9 +14,24 @@ module.exports = (sequelize, Sequelize) => {
       defaultValue: 5
     }
   }, {
-    timestamps: true,
-    underscored: true,
-    paranoid: true
-  });
+      timestamps: true,
+      underscored: true,
+      paranoid: true,
+      tableName: "stock",
+      indexes: [
+        // Reporte 3: Alertas de Stock / Existencias bajas
+        {
+          name: "idx_stock_quantity_on_hand",
+          fields: ["quantity_on_hand"],
+        },
+        // Opcional: Índice para buscar productos por debajo de su umbral dinámico
+        {
+          name: "idx_stock_reorder_level",
+          fields: ["reorder_level"],
+        },
+      ],
+    }
+  );
+
   return Stock;
 };

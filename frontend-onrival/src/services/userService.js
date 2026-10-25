@@ -4,33 +4,19 @@ export const userService = {
   // GET /api/v1/users/employees
   async getEmployees() {
     const res = await api.get("/users/employees");
-    const data = res.data?.data || res.data || [];
-    return data.map((emp) => ({
-      id: emp.id,
-      user_id: emp.user_id,
-      employee_code: emp.employee_code,
-      name: `${emp.first_name || ""} ${emp.last_name || ""}`.trim() || "Empleado",
-      email: emp.user?.email || "—",
-      role: emp.position || emp.user?.role?.name || "Empleado",
-      status: emp.user?.is_active ? "Activo" : "Inactivo",
-      is_active: Boolean(emp.user?.is_active),
-    }));
+    return res.data?.data || res.data || [];
   },
 
   // GET /api/v1/users/customers
   async getClients() {
     const res = await api.get("/users/customers");
-    const data = res.data?.data || res.data || [];
-    return data.map((c) => ({
-      id: c.id,
-      user_id: c.user_id,
-      name: `${c.first_name || ""} ${c.last_name || ""}`.trim() || "Cliente",
-      email: c.user?.email || "—",
-      phone: c.phone || "—",
-      totalOrders: Number(c.orders_count || c.totalOrders || 0),
-      status: (c.user?.is_active ?? true) ? "Activo" : "Inactivo",
-      is_active: Boolean(c.user?.is_active ?? true),
-    }));
+    return res.data?.data || res.data || [];
+  },
+
+  // GET /api/v1/users/roles
+  async getRoles() {
+    const res = await api.get("/users/roles");
+    return res.data?.data || res.data || [];
   },
 
   // POST /api/v1/users/employees
@@ -39,9 +25,41 @@ export const userService = {
     return res.data?.data || res.data;
   },
 
-  // PATCH /api/v1/users/accounts/:id/deactivate
+  // PUT /api/v1/users/employees/:id
+  async updateEmployee(id, payload) {
+    const res = await api.put(`/users/employees/${id}`, payload);
+    return res.data?.data || res.data;
+  },
+
+  // DELETE /api/v1/users/employees/:id
+  async deleteEmployee(id) {
+    const res = await api.delete(`/users/employees/${id}`);
+    return res.data?.data || res.data;
+  },
+
+  // PUT /api/v1/users/customers/:id
+  async updateClient(id, payload) {
+    const res = await api.put(`/users/customers/${id}`, payload);
+    return res.data?.data || res.data;
+  },
+
+  // DELETE /api/v1/users/customers/:id
+  async deleteClient(id) {
+    const res = await api.delete(`/users/customers/${id}`);
+    return res.data?.data || res.data;
+  },
+
+  // PATCH /api/v1/users/accounts/:userId/role
+  async updateUserRole(userId, roleId) {
+    const res = await api.patch(`/users/accounts/${userId}/role`, { role_id: Number(roleId) });
+    return res.data?.data || res.data;
+  },
+
+  // PATCH /api/v1/users/accounts/:userId/deactivate
   async toggleAccountStatus(userId) {
     const res = await api.patch(`/users/accounts/${userId}/deactivate`);
     return res.data?.data || res.data;
   },
 };
+
+export default userService;

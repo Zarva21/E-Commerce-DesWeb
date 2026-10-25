@@ -1,12 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const order = require("./order.controller.js");
-const authJwt = require("../../../middlewares/auth.middleware.js");
+const { verifyToken, checkRole } = require("../../../middlewares/auth.middleware.js");
 
-router.get("/", order.getAll);
-router.get("/me", [authJwt.verifyToken], order.getMyOrders); // GET /sales/orders/me — pedidos del usuario autenticado
-router.get("/:id", order.getById);
-router.patch("/:id/status", order.updateStatus); // ÚNICO campo editable — no hay PUT genérico
 
+router.get("/me", verifyToken, order.getMyOrders);
+router.get("/", verifyToken, checkRole(["admin", "employee"]), order.getAll);
+router.get("/:id", verifyToken, checkRole(["admin", "employee"]), order.getById);
+router.patch("/:id/status", verifyToken, checkRole(["admin", "employee"]), order.updateStatus);
+router.patch("/:id/collect-cash", verifyToken, checkRole(["admin", "employee"]), order.collectCash);
 
 module.exports = router;

@@ -2,9 +2,10 @@ const userService = require("./user.service.js");
 
 exports.getById = async (req, res) => {
   try {
-    res.status(200).send(await userService.findById(req.params.id));
+    const user = await userService.findById(req.params.id);
+    return res.status(200).send({ data: user });
   } catch (err) {
-    res.status(err.status || 500).send({ message: err.message });
+    return res.status(err.status || 500).send({ message: err.message });
   }
 };
 
@@ -14,18 +15,37 @@ exports.changePassword = async (req, res) => {
     if (!oldPassword || !newPassword) {
       return res.status(400).send({ message: "Se requiere la contraseña actual y la nueva." });
     }
-    await userService.changePassword(req.params.id, oldPassword, newPassword);
-    res.status(200).send({ message: "Contraseña actualizada." });
+    const result = await userService.changePassword(req.params.id, oldPassword, newPassword);
+    return res.status(200).send(result);
   } catch (err) {
-    res.status(err.status || 500).send({ message: err.message });
+    return res.status(err.status || 500).send({ message: err.message });
   }
 };
 
 exports.deactivate = async (req, res) => {
   try {
-    await userService.deactivate(req.params.id);
-    res.status(200).send({ message: "Cuenta desactivada." });
+    const result = await userService.toggleStatus(req.params.id);
+    return res.status(200).send({
+      message: result.is_active ? "Cuenta reactivada." : "Cuenta desactivada.",
+      data: result,
+    });
   } catch (err) {
-    res.status(err.status || 500).send({ message: err.message });
+    return res.status(err.status || 500).send({ message: err.message });
+  }
+};
+
+exports.updateRole = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { role_id } = req.body;
+
+    if (!role_id) {
+      return res.status(400).send({ message: "El role_id es obligatorio." });
+    }
+
+    const updatedUser = await userService.updateUserRole(id, role_id);
+    return res.status(200).send({ message: "Rol actualizado.", data: updatedUser });
+  } catch (err) {
+    return res.status(err.status || 500).send({ message: err.message });
   }
 };

@@ -25,12 +25,6 @@ const formatDateTime = (value) => {
       });
 };
 
-const PAYMENT_METHODS = {
-  contra_entrega: "Contra entrega (Efectivo)",
-  tarjeta: "Tarjeta de Crédito / Débito",
-  transferencia: "Transferencia Bancaria",
-};
-
 const ORDER_STATUSES = [
   { value: "pending_payment", label: "Pendiente Pago" },
   { value: "paid", label: "Pagado / En Preparación" },
@@ -44,10 +38,8 @@ export default function OrderDetail({ orderId, onBack }) {
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
-
   const [confirmOpen, setConfirmOpen] = useState(false);
 
-  // Cerrar alerta con la tecla Escape
   useEffect(() => {
     if (!confirmOpen) return;
     const onKey = (e) => {
@@ -57,7 +49,6 @@ export default function OrderDetail({ orderId, onBack }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [confirmOpen]);
 
-  // Cargar pedido real desde la API
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
@@ -66,9 +57,7 @@ export default function OrderDetail({ orderId, onBack }) {
     orderAdminService
       .getById(orderId)
       .then((data) => {
-        if (isMounted) {
-          setOrder(data);
-        }
+        if (isMounted) setOrder(data);
       })
       .catch((err) => {
         console.error("Error al obtener detalle de la orden:", err);
@@ -85,7 +74,7 @@ export default function OrderDetail({ orderId, onBack }) {
     };
   }, [orderId]);
 
-  // Guardar cambio de estado en la BD
+  // Cambio de estado logístico
   const handleStatusChange = async (newStatus) => {
     if (!order || order.status === newStatus || updating) return;
 
@@ -100,21 +89,27 @@ export default function OrderDetail({ orderId, onBack }) {
     }
   };
 
-  // Marcar como cobrado en contra-entrega
+  // Cobro exclusivo de pago contra entrega (CASH)
   const handleConfirmCollect = async () => {
     setConfirmOpen(false);
     setUpdating(true);
     try {
-      // Si existe endpoint para cobro directo se llama aquí; de lo contrario se avanza el estado a pagado
-      await orderAdminService.updateStatus(order.id, "paid");
-      setOrder((prev) => ({
-        ...prev,
-        status: "paid",
-        paid: true,
-        paid_at: new Date().toISOString(),
-      }));
+      const res = await orderAdminService.collectCash(order.id);
+      setOrder((prev) => {
+        const inv = Array.isArray(prev.invoices) ? prev.invoices[0] : prev.invoice;
+        const pay = Array.isArray(inv?.payments) ? inv.payments[0] : inv?.payment;
+
+        if (pay) pay.status = "completed";
+
+        return {
+          ...prev,
+          status: res.order_status || prev.status,
+          payment_status: "completed",
+          paid_at: res.paid_at || new Date().toISOString(),
+        };
+      });
     } catch (err) {
-      alert(err.response?.data?.message || err.message || "Error al registrar el cobro");
+      alert(err.response?.data?.message || err.message || "Error al liquidar el cobro");
     } finally {
       setUpdating(false);
     }
@@ -142,7 +137,6 @@ export default function OrderDetail({ orderId, onBack }) {
     );
   }
 
-  // Normalización de datos recibidos del backend
   const orderNumber = order.order_number || order.id;
   const customerName = order.customer
     ? typeof order.customer === "string"
@@ -150,15 +144,14 @@ export default function OrderDetail({ orderId, onBack }) {
       : `${order.customer.first_name || ""} ${order.customer.last_name || ""}`.trim()
     : "Cliente General / Invitado";
 
-  const customerEmail =
-    order.email || order.customer?.user?.email || order.customer?.email || "—";
+  const customerEmail = order.email || order.customer?.user?.email || order.customer?.email || "—";
   const customerPhone = order.phone || order.customer?.phone || "—";
 
   const customerAddress = order.address
     ? typeof order.address === "string"
       ? order.address
       : `${order.address.address_line1 || ""}${order.address.city ? ", " + order.address.city : ""}`
-    : "Sin dirección";
+    : "Sin dirección registrada";
 
   const items = (order.items || order.order_items || []).map((it) => ({
     id: it.id || it.product_variant_id,
@@ -169,13 +162,22 @@ export default function OrderDetail({ orderId, onBack }) {
     price: Number(it.price || it.unit_price || 0),
   }));
 
-  const isCash = order.payment_method === "contra_entrega";
-  const isCollected = Boolean(order.paid || order.paid_at || order.status === "paid" || order.status === "delivered");
-  const isCancelled = order.status === "cancelled" || order.status === "Cancelado";
+  // Extracción de pago y factura
+  const inv = (Array.isArray(order.invoices) ? order.invoices[0] : order.invoice) || null;
+  const pay = (Array.isArray(inv?.payments) ? inv?.payments[0] : inv?.payment) || null;
 
-  const paymentLabel = isCash
-    ? isCollected ? "Cobrado" : "Pendiente de cobro"
-    : isCollected ? "Pagado" : "Pago pendiente";
+  const paymentProvider = (pay?.provider || order.payment_method || "").toLowerCase();
+  const isCash = paymentProvider === "cash" || paymentProvider === "contra_entrega";
+  const isPaymentCompleted = pay?.status === "completed" || order.payment_status === "completed";
+  const isCancelled = order.status === "cancelled";
+
+  // Extracción de cupón
+  const appliedCoupon =
+    (Array.isArray(order.order_coupons) ? order.order_coupons[0] : order.order_coupons) ||
+    order.order_coupon ||
+    null;
+  const couponCode = appliedCoupon?.coupon?.code || order.coupon_code || null;
+  const couponDiscount = Number(appliedCoupon?.discount_amount || order.discount || 0);
 
   return (
     <div className="order-detail">
@@ -196,6 +198,7 @@ export default function OrderDetail({ orderId, onBack }) {
 
       <div className="order-detail-layout">
         <div className="order-detail-main">
+          {/* Listado de Artículos */}
           <div className="order-detail-card">
             <h3>Productos en la Orden</h3>
             <ul className="order-detail-items">
@@ -212,14 +215,44 @@ export default function OrderDetail({ orderId, onBack }) {
               ))}
             </ul>
 
-            <div className="order-detail-total">
-              <span>Total Liquidado / Por Cobrar:</span>
-              <span>{formatPrice(order.total)}</span>
+            {/* Desglose Financiero */}
+            <div style={{ marginTop: "1.5rem", borderTop: "1px solid #e2e8f0", paddingTop: "1rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                <span style={{ color: "#64748b" }}>Subtotal:</span>
+                <span>{formatPrice(order.subtotal)}</span>
+              </div>
+
+              {couponDiscount > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", color: "#16a34a" }}>
+                  <span>
+                    Descuento Cupón {couponCode && <strong style={{ background: "#dcfce7", padding: "1px 6px", borderRadius: "4px" }}>{couponCode}</strong>}:
+                  </span>
+                  <strong>-{formatPrice(couponDiscount)}</strong>
+                </div>
+              )}
+
+              {Number(order.tax) > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                  <span style={{ color: "#64748b" }}>IVA (12%):</span>
+                  <span>{formatPrice(order.tax)}</span>
+                </div>
+              )}
+
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem" }}>
+                <span style={{ color: "#64748b" }}>Costo de Envío:</span>
+                <span>{formatPrice(order.shipping_cost || 0)}</span>
+              </div>
+
+              <div className="order-detail-total" style={{ borderTop: "2px solid #0f172a", paddingTop: "0.75rem", marginTop: "0.75rem" }}>
+                <span>Total General:</span>
+                <span>{formatPrice(order.total)}</span>
+              </div>
             </div>
           </div>
         </div>
 
         <aside className="order-detail-side">
+          {/* Datos del Cliente */}
           <div className="order-detail-card">
             <h3>Datos de Entrega</h3>
             <p className="order-detail-line">
@@ -230,39 +263,59 @@ export default function OrderDetail({ orderId, onBack }) {
             <p className="order-detail-line order-detail-muted">{customerAddress}</p>
           </div>
 
+          {/* Transacción / Cobro */}
           <div className="order-detail-card">
-            <h3>Pago</h3>
+            <h3>Cobro y Transacción</h3>
             <p className="order-detail-line">
-              <strong>{PAYMENT_METHODS[order.payment_method] ?? order.payment_method ?? "No especificado"}</strong>
+              <strong>
+                {isCash ? "Efectivo (Pago Contra Entrega)" : "Tarjeta de Crédito / Débito (Stripe)"}
+              </strong>
             </p>
-            <div className="order-pay-status">
-              <StatusBadge label={paymentLabel} tone={isCollected ? "success" : "warning"} />
+            <div className="order-pay-status" style={{ margin: "0.75rem 0" }}>
+              <StatusBadge
+                label={isPaymentCompleted ? "Cobrado / Pagado" : "Pendiente de Cobro"}
+                tone={isPaymentCompleted ? "success" : "warning"}
+              />
             </div>
 
-            {isCash && (
-              <>
-                {order.paid_at && (
-                  <p className="order-detail-line order-detail-muted">
-                    Cobrado el {formatDateTime(order.paid_at)}
-                  </p>
-                )}
+            {pay?.payment_date && (
+              <p className="order-detail-line order-detail-muted">
+                Liquidado el: {formatDateTime(pay.payment_date)}
+              </p>
+            )}
 
+            {/* BOTÓN INDEPENDIENTE PARA COBRAR EFECTIVO */}
+            {isCash && (
+              <div style={{ marginTop: "1rem" }}>
                 <button
                   type="button"
-                  className={`order-collect-btn ${isCollected ? "order-collect-btn-done" : ""}`}
+                  className={`order-collect-btn ${isPaymentCompleted ? "order-collect-btn-done" : ""}`}
                   onClick={() => setConfirmOpen(true)}
-                  disabled={isCollected || isCancelled || updating}
+                  disabled={isPaymentCompleted || isCancelled || updating}
+                  style={{
+                    width: "100%",
+                    padding: "0.75rem",
+                    backgroundColor: isPaymentCompleted ? "#10b981" : "#0284c7",
+                    color: "#fff",
+                    border: "none",
+                    borderRadius: "6px",
+                    fontWeight: 600,
+                    cursor: isPaymentCompleted || isCancelled ? "not-allowed" : "pointer",
+                  }}
                 >
-                  {isCollected ? "✓ Cobrado" : `Cobrar ${formatPrice(order.total)}`}
+                  {isPaymentCompleted ? "✓ Pago Liquidado" : `Registrar Cobro (${formatPrice(order.total)})`}
                 </button>
 
-                {isCancelled && !isCollected && (
-                  <p className="order-detail-hint">No se puede cobrar un pedido cancelado.</p>
+                {isCancelled && !isPaymentCompleted && (
+                  <p className="order-detail-hint" style={{ color: "#ef4444", marginTop: "6px" }}>
+                    No se puede cobrar un pedido cancelado.
+                  </p>
                 )}
-              </>
+              </div>
             )}
           </div>
 
+          {/* Estado Logístico (Independiente del pago) */}
           <div className="order-detail-card">
             <h3>Estado Logístico</h3>
             <div className="order-detail-status-options">
@@ -282,26 +335,26 @@ export default function OrderDetail({ orderId, onBack }) {
             </div>
             {updating && (
               <p className="order-detail-hint" style={{ color: "#2563eb" }}>
-                Actualizando pedido en base de datos...
+                Actualizando base de datos...
               </p>
             )}
           </div>
         </aside>
       </div>
 
-      {/* Alerta modal de confirmación de cobro */}
+      {/* Modal de Confirmación de Cobro */}
       {confirmOpen && (
         <div className="order-confirm-overlay" onClick={() => setConfirmOpen(false)}>
           <div
             className="order-confirm-card"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="order-confirm-title"
             onClick={(e) => e.stopPropagation()}
           >
-            <h4 id="order-confirm-title">¿Estás seguro que querés cobrar el pedido?</h4>
+            <h4>¿Confirmar recepción del dinero en efectivo?</h4>
             <p>
-              Pedido #{orderNumber} · {formatPrice(order.total)}. Una vez cobrado, se marcará como pagado.
+              Orden #{orderNumber} · Monto: <strong>{formatPrice(order.total)}</strong>.
+              El estado de la transacción pasará a <code>completed</code>.
             </p>
             <div className="order-confirm-actions">
               <button
@@ -317,7 +370,7 @@ export default function OrderDetail({ orderId, onBack }) {
                 onClick={handleConfirmCollect}
                 autoFocus
               >
-                Sí, cobrar
+                Sí, registrar cobro
               </button>
             </div>
           </div>

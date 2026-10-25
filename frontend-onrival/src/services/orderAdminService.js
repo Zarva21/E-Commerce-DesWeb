@@ -20,4 +20,8 @@ export const orderAdminService = {
     });
     return res.data?.data || res.data;
   },
+  async collectCash(orderId) {
+    const res = await api.patch(`/sales/orders/${orderId}/collect-cash`);
+    return res.data?.data || res.data;
+  },
 };

@@ -46,5 +46,44 @@ const checkRole = (allowedRoleNames) => {
     }
   };
 };
+/**
+ * isOwnerOrAdmin: Permite la acción si el usuario autenticado es ADMIN,
+ * o si el registro en 'customers' le pertenece (customer.user_id === req.userId).
+ */
+const isOwnerOrAdmin = async (req, res, next) => {
+  try {
+    // Si ya viene como admin o employee con permisos globales:
+    if (req.userRole === "admin") {
+      return next();
+    }
 
-module.exports = { verifyToken, checkRole };
+    const customerId = req.params.id;
+    if (!customerId) {
+      return res.status(400).send({ message: "ID de cliente no proporcionado." });
+    }
+
+    const customer = await db.customer.findByPk(customerId, {
+      attributes: ["id", "user_id"]
+    });
+
+    if (!customer) {
+      return res.status(404).send({ message: "Cliente no encontrado." });
+    }
+
+    // Comprobamos si el customer pertenece a la cuenta del token
+    if (customer.user_id !== req.userId) {
+      return res.status(403).send({
+        message: "Acceso denegado: No tienes permiso para modificar o ver esta cuenta."
+      });
+    }
+
+    // Adjuntamos el customer a la request por si el controlador lo necesita
+    req.customer = customer;
+    next();
+  } catch (err) {
+    return res.status(500).send({ message: err.message });
+  }
+};
+
+module.exports = {verifyToken ,checkRole ,isOwnerOrAdmin };
+

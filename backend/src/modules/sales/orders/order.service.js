@@ -10,6 +10,8 @@ const Payment = db.payment;
 const Address = db.address;
 const ProductVariant = db.productVariant;
 const Product = db.product;
+const OrderCoupon = db.orderCoupon;
+const Coupon = db.coupon;
 
 // orders es INMUTABLE en su contenido — nunca agregas/quitas un OrderItem.
 // Solo se permite mover `status` siguiendo transiciones válidas.
@@ -45,7 +47,7 @@ exports.getAll = async (filters = {}) => {
       },
       {
         model: Address,
-        attributes: ["address_line1", "address_line2", "city"]
+        attributes: ["address_line1", "address_line2", "city", "state", "postal_code", "country"]
       },
       {
         model: Invoice,
@@ -64,6 +66,15 @@ exports.getAll = async (filters = {}) => {
             include: [{ model: Product, attributes: ["id", "name"] }]
           }
         ]
+      },
+      {
+        model: OrderCoupon,
+        include: [
+          {
+            model: Coupon,
+            attributes: ["id", "code", "description", "discount_type", "discount_value"]
+          }
+        ]
       }
     ],
     order: [["created_at", "DESC"]]
@@ -72,7 +83,7 @@ exports.getAll = async (filters = {}) => {
   return orders.map((ordInstance) => {
     const ord = ordInstance.toJSON ? ordInstance.toJSON() : ordInstance;
 
-    // 1. Extraer Cliente (verificando Customer o customer)
+    // 1. Extraer Cliente
     const cust = ord.customer || ord.Customer;
     let customerName = "Cliente General";
     let customerEmail = "—";
@@ -87,7 +98,7 @@ exports.getAll = async (filters = {}) => {
       customerEmail = cust.user?.email || cust.User?.email || cust.email || "—";
     }
 
-    // 2. Extraer Factura y Pago (manejando tanto hasOne como hasMany)
+    // 2. Extraer Factura y Pago
     const inv =
       (Array.isArray(ord.invoices) ? ord.invoices[0] : ord.invoices) ||
       (Array.isArray(ord.Invoices) ? ord.Invoices[0] : ord.Invoices) ||
@@ -109,23 +120,39 @@ exports.getAll = async (filters = {}) => {
         paymentStatus = pay.status;   // "completed" | "pending"
       }
     } else {
-      // Fallback si por alguna razón la orden vieja no tuvo invoice
       paymentMethod = ord.status === "paid" ? "stripe" : "cash";
       paymentStatus = ord.status === "paid" ? "completed" : "pending";
     }
+
+    // 3. Extraer Cupón aplicado
+    const appliedCoupon =
+      (Array.isArray(ord.order_coupons) ? ord.order_coupons[0] : ord.order_coupons) ||
+      (Array.isArray(ord.OrderCoupons) ? ord.OrderCoupons[0] : ord.OrderCoupons) ||
+      ord.order_coupon ||
+      ord.OrderCoupon ||
+      null;
+
+    const couponObj = appliedCoupon?.coupon || appliedCoupon?.Coupon || null;
 
     return {
       id: ord.id,
       order_number: ord.order_number,
       customer: customerName,
+      customer_id: ord.customer_id,
       email: customerEmail,
       phone: customerPhone,
       date: ord.created_at || ord.createdAt || ord.order_date,
       status: ord.status,
       payment_method: paymentMethod,
       payment_status: paymentStatus,
-      total: Number(ord.total),
-      subtotal: Number(ord.subtotal),
+      subtotal: Number(ord.subtotal || 0),
+      tax: Number(ord.tax || 0),
+      shipping_cost: Number(ord.shipping_cost || 0),
+      discount: Number(ord.discount || appliedCoupon?.discount_amount || 0),
+      coupon_code: couponObj?.code || null,
+      coupon_description: couponObj?.description || null,
+      total: Number(ord.total || 0),
+      address: ord.address || ord.Address || null,
       items: (ord.order_items || ord.orderItems || []).map((it) => ({
         id: it.id,
         name: it.product_variant?.product?.name || "Artículo",
@@ -165,6 +192,15 @@ exports.getById = async (id) => {
           },
         ],
       },
+      {
+        model: OrderCoupon,
+        include: [
+          {
+            model: Coupon,
+            attributes: ["id", "code", "description", "discount_type", "discount_value"],
+          },
+        ],
+      },
     ],
   });
 
@@ -201,7 +237,7 @@ exports.updateStatus = async (id, newStatus, employeeId = null) => {
   }
 
   await db.sequelize.transaction(async (t) => {
-    // 1. Caso de Cancelación con reposición de inventario
+    // 1. Reposición de inventario en cancelaciones
     if (newStatus === "cancelled" && (order.status === "paid" || order.status === "shipped")) {
       const items = await OrderItem.findAll({ where: { order_id: id }, transaction: t });
       await inventoryService.restockForCancellation(
@@ -212,7 +248,7 @@ exports.updateStatus = async (id, newStatus, employeeId = null) => {
       );
     }
 
-    // 2. Caso Pago Contra Entrega liquidado: Si pasa de pending_payment a paid, liquidar Payment
+    // 2. Liquidación de pago en efectivo
     if (order.status === "pending_payment" && newStatus === "paid") {
       const invoice = Array.isArray(order.invoices) ? order.invoices[0] : order.invoice;
       const payment = Array.isArray(invoice?.payments) ? invoice?.payments[0] : invoice?.payment;
@@ -224,7 +260,7 @@ exports.updateStatus = async (id, newStatus, employeeId = null) => {
       }
     }
 
-    // 3. Persistir nuevo estado de la orden
+    // 3. Guardar nuevo estado
     order.status = newStatus;
     await order.save({ transaction: t });
   });
@@ -238,9 +274,7 @@ exports.updateStatus = async (id, newStatus, employeeId = null) => {
 exports.getOrdersByUserId = async (userId) => {
   const customer = await Customer.findOne({ where: { user_id: userId } });
   if (!customer) {
-    const error = new Error("Cliente no encontrado.");
-    error.status = 404;
-    throw error;
+    return []; // Si el usuario no tiene perfil de cliente aún, retorna array vacío sin reventar 404
   }
 
   const orders = await Order.findAll({
@@ -248,6 +282,7 @@ exports.getOrdersByUserId = async (userId) => {
     include: [
       {
         model: OrderItem,
+        required: false,
         include: [
           {
             model: ProductVariant,
@@ -256,25 +291,107 @@ exports.getOrdersByUserId = async (userId) => {
           },
         ],
       },
+      {
+        model: OrderCoupon,
+        required: false,
+        include: [
+          {
+            model: Coupon,
+            attributes: ["code"],
+          },
+        ],
+      },
     ],
     order: [["created_at", "DESC"]],
   });
 
-  return orders.map((ord) => ({
-    id: ord.order_number,
-    db_id: ord.id,
-    fecha: ord.created_at,
-    estado: ord.status,
-    subtotal: ord.subtotal,
-    envio: ord.shipping_cost,
-    descuento: ord.discount,
-    total: ord.total,
-    items: (ord.order_items || ord.orderItems || []).map((item) => ({
-      name: item.product_variant?.product?.name || "Producto",
-      size: item.product_variant?.size || "Única",
-      color: item.product_variant?.color || null,
-      quantity: item.quantity,
-      price: Number(item.unit_price),
-    })),
-  }));
+  return orders.map((ordInstance) => {
+    const ord = ordInstance.toJSON ? ordInstance.toJSON() : ordInstance;
+
+    const appliedCoupon =
+      (Array.isArray(ord.order_coupons) ? ord.order_coupons[0] : ord.order_coupons) ||
+      (Array.isArray(ord.OrderCoupons) ? ord.OrderCoupons[0] : ord.OrderCoupons) ||
+      ord.order_coupon ||
+      ord.OrderCoupon ||
+      null;
+
+    const items = ord.order_items || ord.orderItems || [];
+
+    return {
+      id: ord.order_number,
+      db_id: ord.id,
+      fecha: ord.created_at || ord.createdAt || ord.order_date,
+      estado: ord.status,
+      subtotal: Number(ord.subtotal || 0),
+      impuesto: Number(ord.tax || 0),
+      envio: Number(ord.shipping_cost || 0),
+      descuento: Number(ord.discount || appliedCoupon?.discount_amount || 0),
+      cupon: appliedCoupon?.coupon?.code || appliedCoupon?.Coupon?.code || null,
+      total: Number(ord.total || 0),
+      items: items.map((item) => {
+        const variant = item.product_variant || item.ProductVariant || {};
+        const prod = variant.product || variant.Product || {};
+        return {
+          name: prod.name || "Producto",
+          size: variant.size || "Única",
+          color: variant.color || null,
+          quantity: item.quantity,
+          price: Number(item.unit_price || 0),
+        };
+      }),
+    };
+  });
+};
+
+/**
+ * Liquida exclusivamente el pago en efectivo (CASH) y actualiza el estado de la orden
+ */
+exports.collectCashPayment = async (orderId, employeeId = null) => {
+  const order = await Order.findByPk(orderId, {
+    include: [{ model: Invoice, include: [{ model: Payment }] }],
+  });
+
+  if (!order) {
+    const error = new Error("Pedido no encontrado.");
+    error.status = 404;
+    throw error;
+  }
+
+  if (order.status === "cancelled") {
+    const error = new Error("No se puede cobrar un pedido cancelado.");
+    error.status = 400;
+    throw error;
+  }
+
+  const invoice = Array.isArray(order.invoices) ? order.invoices[0] : order.invoice;
+  const payment = Array.isArray(invoice?.payments) ? invoice?.payments[0] : invoice?.payment;
+
+  if (!payment) {
+    const error = new Error("No se encontró registro de pago asociado a la factura.");
+    error.status = 404;
+    throw error;
+  }
+
+  if (payment.status === "completed") {
+    return { message: "El pedido ya fue cobrado previamente.", order, payment };
+  }
+
+  await db.sequelize.transaction(async (t) => {
+    payment.status = "completed";
+    payment.payment_date = new Date();
+    await payment.save({ transaction: t });
+
+    // Si la orden estaba esperando pago, se activa a 'paid' (en preparación)
+    if (order.status === "pending_payment") {
+      order.status = "paid";
+      await order.save({ transaction: t });
+    }
+  });
+
+  return {
+    message: "Cobro liquidado con éxito.",
+    payment_status: "completed",
+    paid_at: payment.payment_date,
+    order_status: order.status
+  };
 };

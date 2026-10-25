@@ -1,8 +1,7 @@
 import api from "../config/api";
 
-// Adaptador: Convierte la respuesta anidada de Sequelize al formato que espera tu UI
+// Adaptador: Convierte la respuesta anidada de Sequelize al formato de la tienda
 export function adaptProduct(item) {
-  // Imagen principal o fallback
   const primaryImg =
     item.images?.find((img) => img.is_primary)?.image_url ||
     item.images?.[0]?.image_url ||
@@ -11,15 +10,7 @@ export function adaptProduct(item) {
     item.product_images?.[0]?.image_url ||
     "/img/zapato1.jpg";
 
-  // Suma total de inventario en todas las tallas/variantes
-  const totalStock =
-    item.variants?.reduce((acc, v) => acc + (v.stock?.quantity_on_hand || v.stock?.quantity || 0), 0) ??
-    item.product_variants?.reduce((acc, v) => acc + (v.stock?.quantity_on_hand || v.stock?.quantity || 0), 0) ??
-    0;
-
-    // En catalogService.js dentro de adaptProduct:
   const rawVariants = item.product_variants || item.variants || [];
-
   const normalizedVariants = rawVariants.map((v) => {
     const stockQty = Number(
       v.stock?.quantity_on_hand ??
@@ -40,8 +31,8 @@ export function adaptProduct(item) {
     };
   });
 
+  const totalStock = normalizedVariants.reduce((acc, v) => acc + v.stock.quantity_on_hand, 0);
 
-  // Deducir género según la categoría si no viene explícito
   let gender = "Unisex";
   const catName = (item.category?.name || "").toLowerCase();
   const prodName = (item.name || "").toLowerCase();
@@ -66,7 +57,7 @@ export function adaptProduct(item) {
   };
 }
 
-// Adaptador para el Panel Administrativo (conserva campos de costos y relaciones)
+// Adaptador para el Panel Administrativo
 export function adaptAdminProduct(item) {
   const rawImages = item.product_images || item.images || [];
   const rawVariants = item.product_variants || item.variants || [];
@@ -107,8 +98,26 @@ export const catalogService = {
   // --- CONSULTAS PÚBLICAS (TIENDA) ---
   async getProducts() {
     const res = await api.get("/catalog/products");
-    const items = res.data?.data || (Array.isArray(res.data) ? res.data : []);
+
+    // Desempaquetamos según la estructura que mande el backend:
+    // Caso 1: res.data.data.data (controller con { data: result } y result.data)
+    // Caso 2: res.data.data (result.data directo)
+    // Caso 3: res.data directo como arreglo
+    let items = [];
+
+    if (Array.isArray(res.data?.data?.data)) {
+      items = res.data.data.data;
+    } else if (Array.isArray(res.data?.data)) {
+      items = res.data.data;
+    } else if (Array.isArray(res.data)) {
+      items = res.data;
+    }
+
     return items.map(adaptProduct);
+  },
+
+  async getAll() {
+    return this.getProducts();
   },
 
   async getAll() {
@@ -125,7 +134,7 @@ export const catalogService = {
     return this.getProductById(id);
   },
 
-  // --- CONSULTAS Y ACCIONES ADMINISTRATIVAS ---
+  // --- CONSULTAS Y ACCIONES DE PRODUCTOS (ADMIN) ---
   async getAdminProducts() {
     const res = await api.get("/catalog/products?all=true");
     const items = res.data?.data || (Array.isArray(res.data) ? res.data : []);
@@ -142,6 +151,11 @@ export const catalogService = {
     return res.data?.data || res.data;
   },
 
+  async deleteProduct(id) {
+    const res = await api.delete(`/catalog/products/${id}`);
+    return res.data?.data || res.data;
+  },
+
   async toggleProductStatus(id) {
     const res = await api.patch(`/catalog/products/${id}/status`);
     return res.data?.data || res.data;
@@ -152,19 +166,73 @@ export const catalogService = {
     return res.data?.data || res.data;
   },
 
-  // --- CATÁLOGOS BASE ---
-  async getCategories() {
-    const res = await api.get("/catalog/categories");
-    return res.data?.data || (Array.isArray(res.data) ? res.data : []);
+  async deleteVariant(productId, variantId) {
+    const res = await api.delete(`/catalog/products/${productId}/variants/${variantId}`);
+    return res.data?.data || res.data;
   },
 
+  // --- MARCAS ---
   async getBrands() {
     const res = await api.get("/catalog/brands");
     return res.data?.data || (Array.isArray(res.data) ? res.data : []);
   },
 
+  async createBrand(brandData) {
+    const res = await api.post("/catalog/brands", brandData);
+    return res.data?.data || res.data;
+  },
+
+  async updateBrand(id, brandData) {
+    const res = await api.put(`/catalog/brands/${id}`, brandData);
+    return res.data?.data || res.data;
+  },
+
+  async deleteBrand(id) {
+    const res = await api.delete(`/catalog/brands/${id}`);
+    return res.data?.data || res.data;
+  },
+
+  // --- CATEGORÍAS ---
+  async getCategories() {
+    const res = await api.get("/catalog/categories");
+    return res.data?.data || (Array.isArray(res.data) ? res.data : []);
+  },
+
+  async createCategory(categoryData) {
+    const res = await api.post("/catalog/categories", categoryData);
+    return res.data?.data || res.data;
+  },
+
+  async updateCategory(id, categoryData) {
+    const res = await api.put(`/catalog/categories/${id}`, categoryData);
+    return res.data?.data || res.data;
+  },
+
+  async deleteCategory(id) {
+    const res = await api.delete(`/catalog/categories/${id}`);
+    return res.data?.data || res.data;
+  },
+
+  // --- PROVEEDORES ---
   async getSuppliers() {
     const res = await api.get("/catalog/suppliers");
     return res.data?.data || (Array.isArray(res.data) ? res.data : []);
   },
+
+  async createSupplier(supplierData) {
+    const res = await api.post("/catalog/suppliers", supplierData);
+    return res.data?.data || res.data;
+  },
+
+  async updateSupplier(id, supplierData) {
+    const res = await api.put(`/catalog/suppliers/${id}`, supplierData);
+    return res.data?.data || res.data;
+  },
+
+  async deleteSupplier(id) {
+    const res = await api.delete(`/catalog/suppliers/${id}`);
+    return res.data?.data || res.data;
+  },
 };
+
+export default catalogService;

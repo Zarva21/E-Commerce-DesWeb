@@ -84,9 +84,14 @@ exports.create = async (data) => {
 exports.update = async (id, data) => {
   const coupon = await exports.getById(id);
 
-  if (data.discount_type && !VALID_TYPES.includes(data.discount_type)) {
-    throw httpError("discount_type debe ser 'percentage' o 'fixed'.", 400);
+  if (data.discount_type) {
+    const normalizedType = String(data.discount_type).toUpperCase();
+    if (!["PERCENTAGE", "FIXED"].includes(normalizedType)) {
+      throw httpError("discount_type debe ser 'PERCENTAGE' o 'FIXED'.", 400);
+    }
+    data.discount_type = normalizedType;
   }
+
   if (data.code) {
     data.code = data.code.trim().toUpperCase();
     if (data.code !== coupon.code) {
@@ -121,7 +126,7 @@ exports.remove = async (id) => {
  * Devuelve { coupon_id, discount_amount } o null si NO es válido.
  * No lanza errores: el checkout solo quiere saber sí o no.
  */
-exports.validate = async (code, { subtotal, customerId } = {}) => {
+exports.validate = async (code, { subtotal, customerId, cartItems = [] } = {}) => {
   if (!code) return null;
 
   const amount = Number(subtotal);
@@ -139,19 +144,49 @@ exports.validate = async (code, { subtotal, customerId } = {}) => {
   // max_uses null = usos ilimitados
   if (coupon.max_uses !== null && coupon.used_count >= coupon.max_uses) return null;
 
-  // Cupón nominal (Store Credit): solo lo canjea su dueño.
+  // 1. Restricción por cliente (Store Credit o cupón personal)
   if (coupon.customer_id !== null && coupon.customer_id !== undefined) {
-    if (!customerId || coupon.customer_id.toString() !== customerId.toString()) return null;
+    if (!customerId || String(coupon.customer_id) !== String(customerId)) return null;
   }
 
+  // 2. Base de cálculo según ítems aplicables (si hay restricciones de producto o categoría)
+  let eligibleSubtotal = amount;
+
+  const productIds = coupon.product_ids || (coupon.product_id ? [coupon.product_id] : null);
+  const categoryIds = coupon.category_ids || (coupon.category_id ? [coupon.category_id] : null);
+
+  if ((productIds && productIds.length > 0) || (categoryIds && categoryIds.length > 0)) {
+    if (!cartItems.length) return null;
+
+    const matchedItems = cartItems.filter((item) => {
+      const matchProd = productIds && productIds.length > 0
+        ? productIds.map(String).includes(String(item.product_id || item.productId))
+        : false;
+      const matchCat = categoryIds && categoryIds.length > 0
+        ? categoryIds.map(String).includes(String(item.category_id || item.categoryId))
+        : false;
+      return matchProd || matchCat;
+    });
+
+    if (matchedItems.length === 0) return null; // El carrito no contiene productos elegibles
+
+    eligibleSubtotal = matchedItems.reduce((acc, it) => {
+      const price = Number(it.unit_price || it.price || 0);
+      const qty = Number(it.quantity || 1);
+      return acc + (price * qty);
+    }, 0);
+  }
+
+  // 3. Cálculo del descuento
   let discount;
-  if (coupon.discount_type === "percentage") {
-    discount = money(amount * (Number(coupon.discount_value) / 100));
+  const isPercentage = String(coupon.discount_type).toUpperCase() === "PERCENTAGE";
+
+  if (isPercentage) {
+    discount = money(eligibleSubtotal * (Number(coupon.discount_value) / 100));
   } else {
     discount = money(Number(coupon.discount_value));
   }
 
-  // El descuento nunca puede dejar el total en negativo.
   if (discount > amount) discount = money(amount);
 
   return { coupon_id: coupon.id, discount_amount: discount };
