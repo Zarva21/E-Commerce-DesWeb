@@ -63,7 +63,17 @@ const computeTotals = async (cartId, couponCode, customerId, shippingCost = 35) 
   return { cart, subtotal, discount, tax, shipping_cost: shipping, total, appliedCoupon };
 };
 
-const resolveGuestIdentity = async ({ email, firstName, lastName, phone, address }, transaction) => {
+const resolveGuestIdentity = async (
+  guestData, // Recibimos el objeto completo
+  transaction
+) => {
+  const email = guestData.email;
+  // Soportar first_name (snake_case) o firstName (camelCase)
+  const firstName = (guestData.first_name || guestData.firstName || "Cliente").trim();
+  const lastName = (guestData.last_name || guestData.lastName || "Invitado").trim();
+  const phone = guestData.phone || guestData.telefono || null;
+  const address = guestData.address;
+
   let user = await User.findOne({ where: { email }, transaction });
 
   if (user && !user.is_guest) {
@@ -85,9 +95,9 @@ const resolveGuestIdentity = async ({ email, firstName, lastName, phone, address
     customer = await Customer.create(
       {
         user_id: user.id,
-        first_name: firstName,
-        last_name: lastName,
-        phone: phone || null // Guarda el teléfono en el perfil del cliente
+        first_name: firstName, 
+        last_name: lastName,   
+        phone: phone || null
       },
       { transaction }
     );

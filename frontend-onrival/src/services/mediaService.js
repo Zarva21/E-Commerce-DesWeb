@@ -44,4 +44,19 @@ export const mediaService = {
     const res = await api.delete(`/media/images/${imageId}`);
     return res.data;
   },
+
+  // Alias para mantener compatibilidad si se llama con este nombre
+  async deleteProductImage(imageId) {
+    return this.deleteImage(imageId);
+  },
+
+  /**
+   * Define manualmente una imagen como portada principal (is_primary = true)
+   */
+  async setPrimaryImage(productId, imageId) {
+    const res = await api.patch(`/media/products/${productId}/images/${imageId}/primary`);
+    return res.data?.data || res.data;
+  },
 };
+
+export default mediaService;

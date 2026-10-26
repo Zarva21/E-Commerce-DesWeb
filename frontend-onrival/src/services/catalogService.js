@@ -2,15 +2,19 @@ import api from "../config/api";
 
 // Adaptador: Convierte la respuesta anidada de Sequelize al formato de la tienda
 export function adaptProduct(item) {
+  if (!item) return null;
+
+  const rawImages = item.images || item.product_images || [];
+
+  // Imagen principal o fallback
   const primaryImg =
-    item.images?.find((img) => img.is_primary)?.image_url ||
-    item.images?.[0]?.image_url ||
+    rawImages.find((img) => img.is_primary)?.image_url ||
+    rawImages[0]?.image_url ||
     item.image_url ||
-    item.product_images?.find((img) => img.is_primary)?.image_url ||
-    item.product_images?.[0]?.image_url ||
-    "/img/zapato1.jpg";
+    "/img/placeholder.png";
 
   const rawVariants = item.product_variants || item.variants || [];
+
   const normalizedVariants = rawVariants.map((v) => {
     const stockQty = Number(
       v.stock?.quantity_on_hand ??
@@ -23,7 +27,9 @@ export function adaptProduct(item) {
       id: v.id,
       sku: v.sku,
       size: v.size,
-      color: v.color,
+      color: v.color || null,                    
+      weight: v.weight ? Number(v.weight) : null, 
+      barcode: v.barcode || null,
       stock: {
         quantity: stockQty,
         quantity_on_hand: stockQty,
@@ -39,19 +45,24 @@ export function adaptProduct(item) {
   if (catName.includes("hombre") || prodName.includes("hombre")) gender = "Hombre";
   if (catName.includes("mujer") || prodName.includes("mujer")) gender = "Mujer";
 
+  // Extraer todas las URLs de las fotos del producto
+  const galleryUrls = rawImages
+    .map((img) => (typeof img === "string" ? img : img.image_url))
+    .filter(Boolean);
+
   return {
     id: item.id,
     public_id: item.public_id,
     name: item.name,
     description: item.description || "",
     price: Number(item.sale_price),
-    brand: item.brand?.name || "Sin marca",
-    category: item.category?.name || "General",
+    brand: item.brand?.name || (typeof item.brand === "string" ? item.brand : "Sin marca"),
+    category: item.category?.name || (typeof item.category === "string" ? item.category : "General"),
     categoryId: item.category_id,
     gender,
     sport: item.category?.name || "Deporte",
     image: primaryImg,
-    images: (item.images || item.product_images)?.map((img) => img.image_url) || [primaryImg],
+    images: galleryUrls.length > 0 ? galleryUrls : [primaryImg], 
     stock: totalStock,
     variants: normalizedVariants,
   };
@@ -59,6 +70,8 @@ export function adaptProduct(item) {
 
 // Adaptador para el Panel Administrativo
 export function adaptAdminProduct(item) {
+  if (!item) return null;
+
   const rawImages = item.product_images || item.images || [];
   const rawVariants = item.product_variants || item.variants || [];
 
@@ -86,7 +99,7 @@ export function adaptAdminProduct(item) {
       sku: v.sku,
       color: v.color || "",
       size: v.size || "",
-      weight: v.weight || "",
+      weight: v.weight ? Number(v.weight) : "",
       barcode: v.barcode || "",
       is_active: v.is_active ?? true,
       stock: v.stock || null,
@@ -99,12 +112,7 @@ export const catalogService = {
   async getProducts() {
     const res = await api.get("/catalog/products");
 
-    // Desempaquetamos según la estructura que mande el backend:
-    // Caso 1: res.data.data.data (controller con { data: result } y result.data)
-    // Caso 2: res.data.data (result.data directo)
-    // Caso 3: res.data directo como arreglo
     let items = [];
-
     if (Array.isArray(res.data?.data?.data)) {
       items = res.data.data.data;
     } else if (Array.isArray(res.data?.data)) {
@@ -114,10 +122,6 @@ export const catalogService = {
     }
 
     return items.map(adaptProduct);
-  },
-
-  async getAll() {
-    return this.getProducts();
   },
 
   async getAll() {

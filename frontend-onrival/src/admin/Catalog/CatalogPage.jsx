@@ -20,7 +20,6 @@ const formatPrice = (value) =>
   }).format(value || 0);
 
 const toId = (v) => (v === "" || v == null ? null : Number(v));
-const str = (v) => String(v ?? "").trim();
 const sameId = (a, b) => a != null && b != null && String(a) === String(b);
 
 function getDescendantIds(list, rootId) {
@@ -189,13 +188,49 @@ export default function CatalogPage({
     setSelectedFiles((prev) => prev.filter((_, idx) => idx !== index));
   };
 
+  // Definir imagen como portada manualmente
+  const handleSetPrimary = async (imageId) => {
+    const targetProductId = selectedProduct?.id;
+    if (!targetProductId) {
+      // Si aún no está guardado el producto, actualizamos el estado local
+      setExistingImages((prev) =>
+        prev.map((img) => ({ ...img, is_primary: img.id === imageId }))
+      );
+      return;
+    }
+
+    try {
+      await mediaService.setPrimaryImage(targetProductId, imageId);
+      setExistingImages((prev) =>
+        prev.map((img) => ({ ...img, is_primary: img.id === imageId }))
+      );
+      await loadData();
+    } catch (err) {
+      alert(err.response?.data?.message || err.message || "Error al actualizar la portada.");
+    }
+  };
+
+  // Eliminar imagen guardada con promoción automática
   const removeExistingImage = async (imageId) => {
     if (!window.confirm("¿Deseas eliminar esta fotografía del producto?")) return;
     try {
       if (mediaService.deleteProductImage) {
         await mediaService.deleteProductImage(imageId);
+      } else {
+        await mediaService.deleteImage(imageId);
       }
-      setExistingImages((prev) => prev.filter((img) => img.id !== imageId));
+
+      setExistingImages((prev) => {
+        const wasPrimary = prev.find((img) => img.id === imageId)?.is_primary;
+        const remaining = prev.filter((img) => img.id !== imageId);
+        // Si eliminamos la portada y quedan fotos, promovemos la primera en pantalla
+        if (wasPrimary && remaining.length > 0) {
+          remaining[0].is_primary = true;
+        }
+        return remaining;
+      });
+
+      await loadData();
     } catch (err) {
       alert("Error al eliminar la imagen: " + (err.message || ""));
     }
@@ -426,7 +461,7 @@ export default function CatalogPage({
     }
   };
 
-  // ---------------- MARCAS / CATEGORÍAS / PROVEEDORES (PERSISTENCIA REAL EN BD) ----------------
+  // ---------------- MARCAS / CATEGORÍAS / PROVEEDORES ----------------
   const openEntityModal = (type, item = null, preset = {}) => {
     if (!canManageEntities) return;
     setEntityError("");
@@ -658,7 +693,6 @@ export default function CatalogPage({
                   {filteredProducts.map((item) => {
                     const variantList = item.variants || [];
                     const variantCount = variantList.length;
-                    const variantSizes = variantList.map((v) => v.size).filter(Boolean).join(", ");
                     const primaryImg =
                       item.images?.find((i) => i.is_primary)?.image_url ||
                       item.images?.[0]?.image_url ||
@@ -729,6 +763,7 @@ export default function CatalogPage({
                                 className="data-action-btn data-action-btn-icon data-action-btn-danger"
                                 onClick={() => handleDeleteProduct(item)}
                                 title="Eliminar producto"
+                                aria-label={`Eliminar ${item.name}`}
                               >
                                 <TrashIcon />
                               </button>
@@ -805,7 +840,7 @@ export default function CatalogPage({
         </>
       )}
 
-      {/* MODAL CREAR / EDITAR PRODUCTO CON SOPORTE HASTA 5 FOTOS */}
+      {/* MODAL CREAR / EDITAR PRODUCTO CON SELECTOR DE PORTADA */}
       {isCreatingProduct && (
         <div className="catalog-modal-overlay" onClick={closeProductModal}>
           <div className="catalog-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -922,7 +957,7 @@ export default function CatalogPage({
                 )}
 
                 <small className="data-cell-muted" style={{ display: "block", marginTop: "4px" }}>
-                  La primera imagen marcada será la portada principal del producto en la tienda.
+                  Haz clic en <strong>Hacer Portada</strong> para elegir la foto principal de la vitrina.
                 </small>
 
                 {/* Galería de imágenes (Guardadas en S3 + Nuevas por subir) */}
@@ -932,40 +967,33 @@ export default function CatalogPage({
                     <div
                       key={`saved-${img.id || idx}`}
                       style={{
-                        width: "80px",
-                        height: "80px",
+                        width: "90px",
+                        height: "90px",
                         borderRadius: "8px",
                         overflow: "hidden",
                         border: img.is_primary ? "2px solid #2563eb" : "1px solid #cbd5e1",
                         position: "relative",
                         background: "#f8fafc",
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "space-between",
                       }}
                     >
-                      <img src={img.image_url} alt="Producto" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                      {img.is_primary && (
-                        <span
-                          style={{
-                            position: "absolute",
-                            bottom: 0,
-                            left: 0,
-                            right: 0,
-                            background: "#2563eb",
-                            color: "#fff",
-                            fontSize: "10px",
-                            textAlign: "center",
-                          }}
-                        >
-                          Portada
-                        </span>
-                      )}
+                      <img
+                        src={img.image_url}
+                        alt="Producto"
+                        style={{ width: "100%", height: "100%", objectFit: "cover", position: "absolute", zIndex: 1 }}
+                      />
+
+                      {/* Botón Eliminar */}
                       <button
                         type="button"
                         onClick={() => removeExistingImage(img.id)}
                         style={{
                           position: "absolute",
-                          top: 2,
-                          right: 2,
-                          background: "rgba(220, 38, 38, 0.85)",
+                          top: 3,
+                          right: 3,
+                          background: "rgba(220, 38, 38, 0.9)",
                           color: "#fff",
                           border: "none",
                           borderRadius: "50%",
@@ -976,10 +1004,34 @@ export default function CatalogPage({
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
+                          zIndex: 3,
                         }}
                         title="Eliminar foto"
                       >
                         ✕
+                      </button>
+
+                      {/* Botón Seleccionar Portada */}
+                      <button
+                        type="button"
+                        onClick={() => handleSetPrimary(img.id)}
+                        style={{
+                          position: "absolute",
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: img.is_primary ? "#2563eb" : "rgba(15, 23, 42, 0.75)",
+                          color: "#fff",
+                          border: "none",
+                          fontSize: "10px",
+                          padding: "3px 0",
+                          cursor: img.is_primary ? "default" : "pointer",
+                          textAlign: "center",
+                          zIndex: 3,
+                          fontWeight: 600,
+                        }}
+                      >
+                        {img.is_primary ? "✓ Portada" : "Hacer portada"}
                       </button>
                     </div>
                   ))}
@@ -991,8 +1043,8 @@ export default function CatalogPage({
                       <div
                         key={`new-${idx}`}
                         style={{
-                          width: "80px",
-                          height: "80px",
+                          width: "90px",
+                          height: "90px",
                           borderRadius: "8px",
                           overflow: "hidden",
                           border: isFirstNewAndNoSaved ? "2px solid #2563eb" : "1px dashed #3b82f6",
@@ -1000,7 +1052,11 @@ export default function CatalogPage({
                           background: "#eff6ff",
                         }}
                       >
-                        <img src={item.preview} alt="Nueva foto" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <img
+                          src={item.preview}
+                          alt="Nueva foto"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                        />
                         {isFirstNewAndNoSaved && (
                           <span
                             style={{
@@ -1012,6 +1068,8 @@ export default function CatalogPage({
                               color: "#fff",
                               fontSize: "10px",
                               textAlign: "center",
+                              fontWeight: 600,
+                              padding: "2px 0",
                             }}
                           >
                             Portada
@@ -1022,8 +1080,8 @@ export default function CatalogPage({
                           onClick={() => removeNewFile(idx)}
                           style={{
                             position: "absolute",
-                            top: 2,
-                            right: 2,
+                            top: 3,
+                            right: 3,
                             background: "rgba(220, 38, 38, 0.85)",
                             color: "#fff",
                             border: "none",

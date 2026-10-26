@@ -93,3 +93,33 @@ exports.deleteProductImage = async (imageId) => {
   await image.destroy();
   return { message: "Imagen eliminada con éxito." };
 };
+
+/**
+ * Permite marcar manualmente una imagen existente como portada (is_primary = true)
+ * y desmarca las demás fotos del producto dentro de una transacción.
+ */
+exports.setPrimaryImage = async (productId, imageId) => {
+  const image = await ProductImage.findOne({
+    where: { id: imageId, product_id: productId },
+  });
+
+  if (!image) {
+    const error = new Error("Imagen no encontrada para este producto.");
+    error.status = 404;
+    throw error;
+  }
+
+  return await db.sequelize.transaction(async (t) => {
+    // 1. Quitar portada a todas las fotos de este producto
+    await ProductImage.update(
+      { is_primary: false },
+      { where: { product_id: productId }, transaction: t }
+    );
+
+    // 2. Establecer la foto seleccionada como la nueva portada principal
+    image.is_primary = true;
+    await image.save({ transaction: t });
+
+    return image;
+  });
+};

@@ -418,20 +418,25 @@ exports.removeVariant = async (productId, variantId) => {
 
 // ---------------------------------------------------------------------------
 // Entidad DÉBIL: product_images
-// NOTA: por instrucción del coordinador, POR AHORA no se sube ningún archivo.
-// Solo se guarda el string image_url que mande el frontend. La infraestructura
-// real (S3 / volumen Docker / multer) se programará después.
 // ---------------------------------------------------------------------------
 
 exports.getImages = async (productId) => {
   await assertProductExists(productId);
   return ProductImage.findAll({
     where: { product_id: productId },
-    order: [["display_order", "ASC"]]
+    order: [
+      ["is_primary", "DESC"],     // La portada siempre primero
+      ["display_order", "ASC"],
+      ["created_at", "ASC"]
+    ]
   });
 };
 
-exports.addImage = async (productId, { image_url, alt_text, display_order, is_primary }) => {
+/**
+ * Agrega una imagen al producto.
+ * Si es la primera imagen o si se indica is_primary, se asegura de que quede como portada.
+ */
+exports.addImage = async (productId, { image_url, alt_text, display_order, is_primary = false }) => {
   await assertProductExists(productId);
 
   if (!image_url || typeof image_url !== "string") {
@@ -439,26 +444,99 @@ exports.addImage = async (productId, { image_url, alt_text, display_order, is_pr
   }
 
   return db.sequelize.transaction(async (t) => {
-    // Solo puede haber una imagen principal por producto.
-    if (is_primary) {
+    // 1. Contar imágenes existentes para calcular display_order y saber si es la primera
+    const existingCount = await ProductImage.count({
+      where: { product_id: productId },
+      transaction: t
+    });
+
+    // Si no tiene imágenes previas, OBLIGATORIAMENTE debe ser portada
+    const shouldBePrimary = is_primary || existingCount === 0;
+
+    // 2. Si esta será la portada, desmarcar cualquier otra portada previa
+    if (shouldBePrimary) {
       await ProductImage.update(
         { is_primary: false },
         { where: { product_id: productId }, transaction: t }
       );
     }
 
+    // 3. Crear la nueva imagen
     return ProductImage.create(
-      { product_id: productId, image_url, alt_text, display_order, is_primary },
+      {
+        product_id: productId,
+        image_url,
+        alt_text: alt_text || "Foto del producto",
+        display_order: display_order || existingCount + 1,
+        is_primary: shouldBePrimary
+      },
       { transaction: t }
     );
   });
 };
 
+/**
+ * Elimina una imagen.
+ * Si la imagen eliminada era la portada (is_primary = true), promueve
+ * automáticamente la siguiente imagen disponible del producto a portada.
+ */
 exports.removeImage = async (productId, imageId) => {
   const image = await ProductImage.findOne({
     where: { id: imageId, product_id: productId }
   });
   if (!image) throw httpError("Imagen no encontrada para este producto.", 404);
 
-  await image.destroy(); // soft delete
+  const wasPrimary = image.is_primary;
+
+  await db.sequelize.transaction(async (t) => {
+    // 1. Eliminar la imagen
+    await image.destroy({ transaction: t });
+
+    // 2. Si era la portada, buscar la siguiente imagen disponible para promoverla
+    if (wasPrimary) {
+      const nextImage = await ProductImage.findOne({
+        where: { product_id: productId },
+        order: [
+          ["display_order", "ASC"],
+          ["created_at", "ASC"]
+        ],
+        transaction: t
+      });
+
+      if (nextImage) {
+        nextImage.is_primary = true;
+        await nextImage.save({ transaction: t });
+      }
+    }
+  });
+
+  return { message: "Imagen eliminada correctamente." };
+};
+
+/**
+ * Permite marcar explícitamente una imagen como portada (is_primary = true)
+ */
+exports.setPrimaryImage = async (productId, imageId) => {
+  await assertProductExists(productId);
+
+  return db.sequelize.transaction(async (t) => {
+    // 1. Quitar portada a todas las fotos de este producto
+    await ProductImage.update(
+      { is_primary: false },
+      { where: { product_id: productId }, transaction: t }
+    );
+
+    // 2. Asignar portada a la imagen seleccionada
+    const image = await ProductImage.findOne({
+      where: { id: imageId, product_id: productId },
+      transaction: t
+    });
+
+    if (!image) throw httpError("Imagen no encontrada para este producto.", 404);
+
+    image.is_primary = true;
+    await image.save({ transaction: t });
+
+    return image;
+  });
 };

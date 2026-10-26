@@ -42,3 +42,13 @@ exports.deleteImage = async (req, res) => {
     res.status(err.status || 500).send({ message: err.message });
   }
 };
+
+exports.setPrimary = async (req, res) => {
+  try {
+    const { productId, imageId } = req.params;
+    const result = await mediaService.setPrimaryImage(productId, imageId);
+    return res.status(200).send({ message: "Portada actualizada exitosamente.", data: result });
+  } catch (err) {
+    return res.status(err.status || 500).send({ message: err.message });
+  }
+};

@@ -15,6 +15,7 @@ export default function ProductDetail({ productId, onBack, onGoToCart }) {
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
   const [size, setSize] = useState(null);
+  const [activeImage, setActiveImage] = useState(null);
   const [added, setAdded] = useState(false);
   const { addItem } = useCart();
 
@@ -27,12 +28,24 @@ export default function ProductDetail({ productId, onBack, onGoToCart }) {
         setProduct(data);
         setAdded(false);
 
-        // Preselecciona la primera variante con existencias si existen variantes
+        // 1. Preseleccionar la portada principal o la primera foto disponible
+        const mainImg =
+          data.image ||
+          (Array.isArray(data.images) && data.images[0]) ||
+          "/img/placeholder.png";
+        setActiveImage(mainImg);
+
+        // 2. Preselecciona la primera variante con existencias si existen variantes
         const vars = data.variants || [];
         if (vars.length > 0) {
           const firstAvailable =
-            vars.find((v) => (v.stock?.quantity_on_hand ?? v.stock?.quantity ?? 0) > 0) ||
-            vars[0];
+            vars.find(
+              (v) =>
+                (v.stock?.quantity_on_hand ??
+                  v.stock?.quantity ??
+                  v.quantity_on_hand ??
+                  0) > 0
+            ) || vars[0];
           setSize(firstAvailable.size);
         } else {
           setSize(null);
@@ -80,12 +93,21 @@ export default function ProductDetail({ productId, onBack, onGoToCart }) {
   const currentVariantStock =
     selectedVariant?.stock?.quantity_on_hand ??
     selectedVariant?.stock?.quantity ??
+    selectedVariant?.quantity_on_hand ??
     product.stock ??
     0;
 
   const isOutOfStock = needsSize
     ? !size || currentVariantStock <= 0
     : currentVariantStock <= 0;
+
+  // Extraer lista de imágenes garantizando URLs válidas
+  const galleryImages = (product.images || [])
+    .map((img) => (typeof img === "string" ? img : img.image_url))
+    .filter(Boolean);
+
+  const displayGallery =
+    galleryImages.length > 0 ? galleryImages : [activeImage || "/img/placeholder.png"];
 
   const handleAddToCart = () => {
     if (needsSize && !size) return;
@@ -97,7 +119,7 @@ export default function ProductDetail({ productId, onBack, onGoToCart }) {
         name: product.name,
         brand: product.brand,
         price: product.price,
-        image: product.image,
+        image: activeImage || product.image,
         product_variant_id: selectedVariant?.id,
         stock_available: currentVariantStock,
       },
@@ -119,15 +141,133 @@ export default function ProductDetail({ productId, onBack, onGoToCart }) {
       </button>
 
       <div className="product-detail-layout">
-        <div className="product-detail-image">
-          <img src={product.image} alt={product.name} />
+        {/* COLUMNA IZQUIERDA: FOTO PRINCIPAL + MINIATURAS */}
+        <div className="product-detail-media">
+          <div className="product-detail-image">
+            <img src={activeImage || product.image} alt={product.name} />
+          </div>
+
+          {/* Carrusel/Fila de Miniaturas si hay más de 1 imagen */}
+          {displayGallery.length > 1 && (
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                marginTop: "12px",
+                overflowX: "auto",
+                paddingBottom: "4px",
+              }}
+            >
+              {displayGallery.map((imgUrl, index) => {
+                const isSelected = imgUrl === activeImage;
+                return (
+                  <button
+                    key={index}
+                    type="button"
+                    onClick={() => setActiveImage(imgUrl)}
+                    style={{
+                      border: isSelected ? "2px solid #2563eb" : "1px solid #cbd5e1",
+                      borderRadius: "8px",
+                      padding: "2px",
+                      background: "#fff",
+                      cursor: "pointer",
+                      width: "64px",
+                      height: "64px",
+                      flexShrink: 0,
+                      overflow: "hidden",
+                    }}
+                  >
+                    <img
+                      src={imgUrl}
+                      alt={`Miniatura ${index + 1}`}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        borderRadius: "6px",
+                      }}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          )}
         </div>
 
+        {/* COLUMNA DERECHA: INFORMACIÓN DEL PRODUCTO */}
         <div className="product-detail-info">
           <p className="product-detail-brand">{product.brand}</p>
           <h1 className="product-detail-name">{product.name}</h1>
           <p className="product-detail-gender">{product.gender}</p>
           <p className="product-detail-price">{formatPrice(product.price)}</p>
+
+          {/* FICHA TÉCNICA DINÁMICA: COLOR, PESO Y SKU */}
+          <div
+            style={{
+              display: "flex",
+              gap: "1.25rem",
+              background: "#f8fafc",
+              border: "1px solid #e2e8f0",
+              borderRadius: "8px",
+              padding: "0.75rem 1rem",
+              margin: "1rem 0",
+              fontSize: "0.88rem",
+            }}
+          >
+            <div>
+              <span
+                style={{
+                  color: "#64748b",
+                  display: "block",
+                  fontSize: "0.72rem",
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              >
+                Color
+              </span>
+              <strong style={{ color: "#1e293b" }}>
+                {selectedVariant?.color || "Estándar"}
+              </strong>
+            </div>
+
+            <div style={{ borderLeft: "1px solid #cbd5e1", paddingLeft: "1.25rem" }}>
+              <span
+                style={{
+                  color: "#64748b",
+                  display: "block",
+                  fontSize: "0.72rem",
+                  textTransform: "uppercase",
+                  fontWeight: 600,
+                }}
+              >
+                Peso
+              </span>
+              <strong style={{ color: "#1e293b" }}>
+                {selectedVariant?.weight ? `${selectedVariant.weight} kg` : "N/D"}
+              </strong>
+            </div>
+
+            {selectedVariant?.sku && (
+              <div style={{ borderLeft: "1px solid #cbd5e1", paddingLeft: "1.25rem" }}>
+                <span
+                  style={{
+                    color: "#64748b",
+                    display: "block",
+                    fontSize: "0.72rem",
+                    textTransform: "uppercase",
+                    fontWeight: 600,
+                  }}
+                >
+                  SKU
+                </span>
+                <span style={{ fontFamily: "monospace", color: "#475569" }}>
+                  {selectedVariant.sku}
+                </span>
+              </div>
+            )}
+          </div>
+
           {product.description && (
             <p className="product-detail-description">{product.description}</p>
           )}
@@ -147,7 +287,13 @@ export default function ProductDetail({ productId, onBack, onGoToCart }) {
             </div>
           )}
 
-          <div style={{ margin: "0.75rem 0", fontSize: "0.9rem", color: currentVariantStock > 0 ? "#16a34a" : "#dc2626" }}>
+          <div
+            style={{
+              margin: "0.75rem 0",
+              fontSize: "0.9rem",
+              color: currentVariantStock > 0 ? "#16a34a" : "#dc2626",
+            }}
+          >
             {currentVariantStock > 0
               ? `● ${currentVariantStock} unidades disponibles`
               : "● Sin existencias en esta talla"}
