@@ -28,7 +28,10 @@ exports.createAccount = async ({ email, password, roleName }, transaction) => {
 };
 
 exports.findById = async (id) => {
-  const user = await User.findByPk(id, { attributes: { exclude: ["password_hash"] } });
+  const user = await User.findByPk(id, {
+    attributes: { exclude: ["password_hash"] },
+    include: [{ model: Role, attributes: ["id", "name"] }]
+  });
   if (!user) {
     const error = new Error("Usuario no encontrado.");
     error.status = 404;
@@ -54,10 +57,42 @@ exports.changePassword = async (id, oldPassword, newPassword) => {
 
   user.password_hash = bcrypt.hashSync(newPassword, 8);
   await user.save();
+  return { message: "Contraseña actualizada correctamente." };
 };
 
-exports.deactivate = async (id) => {
+/**
+ * toggleStatus: activa o desactiva la cuenta (soporta /deactivate de forma reversible)
+ */
+exports.toggleStatus = async (id) => {
   const user = await exports.findById(id);
-  await User.update({ is_active: false }, { where: { id } });
-  return user;
+  const newStatus = !user.is_active;
+  await User.update({ is_active: newStatus }, { where: { id } });
+  return { id, is_active: newStatus };
+};
+
+// Alias para compatibilidad con código existente
+exports.deactivate = exports.toggleStatus;
+
+/**
+ * updateUserRole: actualiza el rol de la cuenta base
+ */
+exports.updateUserRole = async (userId, roleId) => {
+  const user = await User.findByPk(userId);
+  if (!user) {
+    const error = new Error("Usuario no encontrado.");
+    error.status = 404;
+    throw error;
+  }
+
+  const role = await Role.findByPk(roleId);
+  if (!role) {
+    const error = new Error("El rol seleccionado no existe.");
+    error.status = 400;
+    throw error;
+  }
+
+  user.role_id = roleId;
+  await user.save();
+
+  return { id: user.id, email: user.email, role_id: user.role_id, role_name: role.name };
 };

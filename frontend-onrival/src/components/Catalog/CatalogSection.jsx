@@ -1,0 +1,132 @@
+import { useEffect, useState } from "react";
+import FilterPanel from "./FilterPanel";
+import ProductCard from "./ProductCard";
+import { catalogService } from "../../services/catalogService";
+import { DEFAULT_FILTERS } from "./filterOptions";
+import { normalize } from "../../utils/normalize";
+import "./CatalogSection.css";
+
+const SECTION_LINKS = [
+  { id: "hombre", label: "Hombre" },
+  { id: "mujer", label: "Mujer" },
+  { id: "accesorios", label: "Accesorios" },
+];
+
+function applyFilters(products, filters) {
+  return products.filter((product) => {
+    if (filters.categoria && normalize(product.category) !== normalize(filters.categoria)) return false;
+    if (filters.marca && normalize(product.brand) !== normalize(filters.marca)) return false;
+
+    // Se removió el filtro de oferta para evitar que oculte productos
+    // si no existe la propiedad onSale en la base de datos
+
+    if (product.price < filters.priceMin || product.price > filters.priceMax) return false;
+    return true;
+  });
+}
+
+// Convierte el filtro que viene de un destacado del carrusel en filtros del catálogo
+function filtersFromHero(filter) {
+  if (!filter) return DEFAULT_FILTERS;
+  // Si viene con tipo "offers", no bloqueamos nada y dejamos los filtros base
+  if (filter.kind === "offers") return { ...DEFAULT_FILTERS };
+  if (filter.kind === "category") return { ...DEFAULT_FILTERS, categoria: filter.category };
+  return DEFAULT_FILTERS;
+}
+
+// Valores únicos y ordenados de un campo de los productos
+const uniqueSorted = (products, field) =>
+  [...new Set(products.map((p) => p[field]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
+
+export default function CatalogSection({ section, filter = null, onSelectSection, onSelectProduct }) {
+  const [allProducts, setAllProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState(() => filtersFromHero(filter));
+  const [panelOpen, setPanelOpen] = useState(false);
+  const isGeneralCatalog = section === "catalogo";
+
+  useEffect(() => {
+    setLoading(true);
+    catalogService
+      .getAll()
+      .then((data) => setAllProducts(data))
+      .catch((err) => console.error("Error al obtener catálogo:", err))
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Si cambia el filtro del destacado (o se quita al navegar), se actualizan los filtros
+  useEffect(() => {
+    setFilters(filtersFromHero(filter));
+  }, [filter]);
+
+  // Filtrar base según la sección activa ("hombre", "mujer", "accesorios" o todo)
+  const baseProducts = isGeneralCatalog
+    ? allProducts
+    : allProducts.filter((p) => {
+        const secNorm = normalize(section || "");
+        return (
+          normalize(p.gender || "").includes(secNorm) ||
+          normalize(p.category || "").includes(secNorm)
+        );
+      });
+
+  const products = applyFilters(baseProducts, filters);
+
+  const categoryOptions = uniqueSorted(baseProducts, "category");
+  const brandOptions = uniqueSorted(baseProducts, "brand");
+
+  if (loading) {
+    return (
+      <section id="catalogo" className="catalog">
+        <div style={{ padding: "3rem", width: "100%", textAlign: "center" }}>
+          <p>Cargando artículos deportivos...</p>
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section id="catalogo" className="catalog">
+      <aside className="catalog-sidebar">
+        <p className="catalog-eyebrow">Catálogo</p>
+        <h2>ARTÍCULOS DEPORTIVOS</h2>
+
+        {isGeneralCatalog && (
+          <div className="catalog-section-links">
+            {SECTION_LINKS.map((link) => (
+              <button key={link.id} type="button" className="catalog-section-link" onClick={() => onSelectSection(link.id)}>
+                {link.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <button type="button" className="catalog-filter-toggle" onClick={() => setPanelOpen(true)}>
+          Filtrar
+        </button>
+      </aside>
+
+      <div className="catalog-grid">
+        {products.length > 0 ? (
+          products.map((product) => (
+            <ProductCard key={product.id} {...product} onSelect={onSelectProduct} />
+          ))
+        ) : (
+          <div className="catalog-empty">
+            <span className="catalog-empty-mark" aria-hidden="true" />
+            <p>No hay productos que coincidan con esos filtros.</p>
+          </div>
+        )}
+      </div>
+
+      <FilterPanel
+        open={panelOpen}
+        value={filters}
+        categoryOptions={categoryOptions}
+        brandOptions={brandOptions}
+        onClose={() => setPanelOpen(false)}
+        onApply={setFilters}
+      />
+    </section>
+  );
+}

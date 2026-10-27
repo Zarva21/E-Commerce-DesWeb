@@ -1,18 +1,102 @@
-version: '3.8'
 
 services:
-  backend:
-    build: ./backend
-    container_name: ecommerce_backend
-    volumes:
-      # Mapea la carpeta local './uploads' del host con '/app/uploads' dentro del contenedor
-      - ./uploads:/app/uploads
-    environment:
-      - PORT=3000
-
-  frontend:
-    build: ./frontend
+  # 1. Reverse Proxy Principal (Puerto 80 hacia el exterior)
+  reverseproxy:
+    image: nginx:alpine
+    container_name: onrival_proxy
+    restart: always
     ports:
       - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
+      - frontend
       - backend
+    networks:
+      - onrival_net
+
+  # 2. Frontend React (Vite + Nginx)
+  frontend:
+    build:
+      context: ./frontend-onrival
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api/v1
+        VITE_STRIPE_PUBLIC_KEY: ${VITE_STRIPE_PUBLIC_KEY}
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+    container_name: onrival_frontend
+    restart: always
+    networks:
+      - onrival_net
+
+  # 3. Clúster Backend (2 Réplicas en Alta Disponibilidad)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: always
+    deploy:
+      replicas: 2
+    environment:
+      - NODE_ENV=${NODE_ENV:-development}
+      - PORT=8082
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-DesaWebPrueba}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-1234}
+      - DB_DIALECT=postgres
+      - DB_SSL=false
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_EXPIRES_IN=${JWT_EXPIRES_IN}
+      - RESEND_API_KEY=${RESEND_API_KEY}
+      - EMAIL_FROM=${EMAIL_FROM}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - S3_REGION=${S3_REGION}
+      - S3_BUCKET_NAME=${S3_BUCKET_NAME}
+      - S3_ACCESS_KEY=${S3_ACCESS_KEY}
+      - S3_SECRET_KEY=${S3_SECRET_KEY}
+      - S3_FORCE_PATH_STYLE=false
+      - S3_PUBLIC_URL=${S3_PUBLIC_URL}
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - CASH_MAX_AMOUNT=${CASH_MAX_AMOUNT}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - onrival_net
+
+  # 4. Redis (Para Refresh Tokens, OTP 2FA y Bloqueo de Stock)
+  redis:
+    image: redis:7-alpine
+    container_name: onrival_redis
+    restart: always
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - onrival_net
+
+  # 5. Base de Datos PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: onrival_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-1234}
+      POSTGRES_DB: ${DB_NAME:-DesaWebPrueba}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    networks:
+      - onrival_net
+
+networks:
+  onrival_net:
+    driver: bridge
+
+volumes:
+  redis_data:
+  pg_data:

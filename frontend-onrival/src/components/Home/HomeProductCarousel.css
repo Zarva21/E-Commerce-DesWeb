@@ -1,0 +1,13 @@
+.home-carousel { max-width: 1180px; margin: 0 auto 110px; padding: 0 28px; }
+.home-carousel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.home-carousel-head h2 { margin: 0; font-family: var(--font-display); font-weight: 600; font-size: 28px; color: var(--violet-900); }
+.home-carousel-arrows { display: flex; gap: 8px; }
+.home-carousel-arrows button { width: 36px; height: 36px; border-radius: 8px; border: 2px solid var(--violet-700); background: var(--surface); color: var(--violet-700); font-size: 18px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.15s ease, color 0.15s ease; }
+.home-carousel-arrows button:hover:not(:disabled) { background: var(--violet-700); color: #fff; }
+.home-carousel-arrows button:disabled { opacity: 0.3; cursor: not-allowed; }
+.home-carousel-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+.home-carousel-more { display: block; margin: 32px auto 0; border: none; background: var(--violet-700); color: #fff; font-family: var(--font-body); font-weight: 800; font-size: 14px; letter-spacing: 0.3px; padding: 13px 34px; cursor: pointer; transform: skewX(-10deg); transition: background 0.15s ease; }
+.home-carousel-more span { display: inline-block; transform: skewX(10deg); }
+.home-carousel-more:hover { background: var(--violet-600); }
+@media (max-width: 900px) { .home-carousel-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .home-carousel-grid { grid-template-columns: 1fr; } }

@@ -6,15 +6,28 @@ const userRoutes = require("./modules/users/users.routes");
 const catalogRoutes = require("./modules/catalog/catalog.routes");
 const salesRoutes = require("./modules/sales/sales.routes");
 const inventoryRoutes = require("./modules/inventory/inventory.routes");
-const marketingRoutes = require('./modules/marketing/marketing.routes');
-const systemRoutes = require('./modules/system/system.routes');
+const marketingRoutes = require("./modules/marketing/marketing.routes");
+const mediaRoutes = require("./modules/media/media.routes");
+const systemRoutes = require("./modules/system/system.routes");
 
 const errorHandler = require("./middlewares/error.middleware.js");
 
 const app = express();
 
 // 2. Middlewares Globales
-app.use(cors()); // TODO: restringir origin (ej. { origin: "http://localhost:8080" }) antes de producción
+app.use(cors({
+  origin: [
+    "http://localhost:5173", // Vite en desarrollo
+    "http://localhost:3000", // Frontend alternativo
+    "http://localhost",      // Producción / Nginx en Docker
+    "http://127.0.0.1:5173"
+  ],
+  credentials: true, // Crucial para permitir envío de cookies (Refresh Token) y headers Authorization
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"]
+}));
+
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -25,6 +38,7 @@ app.use(`${API_PREFIX}/catalog`, catalogRoutes);
 app.use(`${API_PREFIX}/sales`, salesRoutes);
 app.use(`${API_PREFIX}/inventory`, inventoryRoutes);
 app.use(`${API_PREFIX}/marketing`, marketingRoutes);
+app.use(`${API_PREFIX}/media`, mediaRoutes);
 app.use(`${API_PREFIX}/system`, systemRoutes);
 
 // 4. Catch-all para rutas que no existen (404)

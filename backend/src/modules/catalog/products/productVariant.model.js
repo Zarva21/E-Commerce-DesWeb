@@ -18,16 +18,24 @@ module.exports = (sequelize, Sequelize) => {
       type: Sequelize.DECIMAL(10, 3)
     },
     barcode: {
-      type: Sequelize.STRING(50)
+        type: Sequelize.STRING(50),
+      },
+      is_active: {
+        type: Sequelize.BOOLEAN,
+        defaultValue: true,
+      },
     },
-    is_active: {
-      type: Sequelize.BOOLEAN,
-      defaultValue: true
+    {
+      timestamps: true,
+      underscored: true,
+      paranoid: true,
+      indexes: [
+        {
+          name: "idx_product_variants_product_id",
+          fields: ["product_id"],
+        },
+      ],
     }
-  }, {
-    timestamps: true,
-    underscored: true,
-    paranoid: true
-  });
+  );
   return ProductVariant;
 };

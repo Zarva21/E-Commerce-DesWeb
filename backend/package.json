@@ -3,22 +3,35 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test --test-concurrency=1",
+    "test:watch": "node --test --watch --test-concurrency=1",
+    "test:services": "node scripts/verify-services.js",
+    "test:integration": "node scripts/run-integration-tests.js",
+    "test:cleanup": "node scripts/cleanup-qa-data.js",
+    "test:routes": "node scripts/run-route-audit.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1152.0",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
+    "google-auth-library": "^11.3.1",
+    "ioredis": "^6.0.0",
+    "joi": "^18.2.9",
     "jsonwebtoken": "^9.0.3",
+    "multer": "^2.4.0",
+    "pdfkit": "^0.20.2",
     "pg": "^8.23.0",
     "pg-hstore": "^2.3.4",
-    "sequelize": "^6.37.8"
+    "resend": "^6.34.1",
+    "sequelize": "^6.37.8",
+    "stripe": "^22.6.2"
   },
   "devDependencies": {
     "morgan": "^1.11.0",

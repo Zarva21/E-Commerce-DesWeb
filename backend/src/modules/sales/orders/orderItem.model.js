@@ -16,13 +16,26 @@ module.exports = (sequelize, Sequelize) => {
       allowNull: false
     },
     subtotal: {
-      type: Sequelize.DECIMAL(12, 2),
-      allowNull: false
+        type: Sequelize.DECIMAL(12, 2),
+        allowNull: false,
+      },
+    },
+    {
+      timestamps: true,
+      underscored: true,
+      paranoid: true,
+     
+      indexes: [
+        {
+          name: "idx_order_items_product_variant",
+          fields: ["product_variant_id"],
+        },
+        {
+          name: "idx_order_items_order_id",
+          fields: ["order_id"],
+        },
+      ],
     }
-  }, {
-    timestamps: true,
-    underscored: true,
-    paranoid: true
-  });
+  );
   return OrderItem;
 };
