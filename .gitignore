@@ -1,4 +1,15 @@
+# Dependencias y builds
 node_modules/
+dist/
+build/
+
+# Variables de entorno SECRETAS (¡Nunca subirlas a Git!)
 .env
+.env.*
+!.env.example
 .env.development
 .env.production
+
+# Volúmenes locales o datos temporales
+redis_data/
+pg_data/

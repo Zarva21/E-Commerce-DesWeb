@@ -17,7 +17,7 @@ module.exports = (sequelize, Sequelize) => {
       timestamps: true,
       underscored: true,
       paranoid: true,
-      tableName: "stock",
+      tableName: "stocks",
       indexes: [
         // Reporte 3: Alertas de Stock / Existencias bajas
         {

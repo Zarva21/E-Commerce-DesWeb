@@ -131,61 +131,47 @@ export default function InventoryPage() {
   };
 
   const handleSaveMovement = async (e) => {
-    e.preventDefault();
-    setErrorMsg("");
+  e.preventDefault();
+  setErrorMsg("");
 
-    const qty = parseInt(movementForm.quantity, 10);
-    if (isNaN(qty) || qty <= 0) {
-      setErrorMsg("Ingresa una cantidad válida mayor a 0.");
-      return;
-    }
+  const qty = parseInt(movementForm.quantity, 10);
+  if (isNaN(qty) || qty <= 0) {
+    setErrorMsg("Ingresa una cantidad válida mayor a 0.");
+    return;
+  }
 
-    const isOutgoing = ["DAMAGE_OUT", "SUPPLIER_RETURN_OUT"].includes(movementForm.movement_type);
-    if (isOutgoing && selectedVariant.quantity_on_hand < qty) {
-      setErrorMsg(`Stock insuficiente. Solo hay ${selectedVariant.quantity_on_hand} unidades disponibles.`);
-      return;
-    }
+  const isOutgoing = ["DAMAGE_OUT", "SUPPLIER_RETURN_OUT"].includes(movementForm.movement_type);
+  if (isOutgoing && selectedVariant.quantity_on_hand < qty) {
+    setErrorMsg(`Stock insuficiente. Solo hay ${selectedVariant.quantity_on_hand} unidades disponibles.`);
+    return;
+  }
 
-    setSubmitting(true);
-    try {
-      await inventoryService.recordMovement({
-        product_variant_id: selectedVariant.product_variant_id,
-        movement_type: movementForm.movement_type,
-        quantity: qty,
-        reference: movementForm.reference || undefined,
-        notes: movementForm.notes || undefined,
-      });
+  setSubmitting(true);
+  try {
+    // Se envía el id numérico y la cantidad parseada
+    await inventoryService.recordMovement({
+      product_variant_id: Number(selectedVariant.product_variant_id),
+      movement_type: movementForm.movement_type,
+      quantity: qty,
+      reference: movementForm.reference?.trim() || undefined,
+      notes: movementForm.notes?.trim() || undefined,
+    });
 
-      await loadData();
-      setSelectedVariant(null);
-    } catch {
-      const delta = isOutgoing ? -qty : qty;
-      setInventory((prev) =>
-        prev.map((item) =>
-          item.product_variant_id === selectedVariant.product_variant_id
-            ? { ...item, quantity_on_hand: item.quantity_on_hand + delta }
-            : item
-        )
-      );
-
-      const newMovement = {
-        id: Date.now(),
-        product_variant_id: selectedVariant.product_variant_id,
-        sku: selectedVariant.sku,
-        employee_id: 1,
-        movement_type: movementForm.movement_type,
-        quantity: delta,
-        reference: movementForm.reference || "AJUSTE-MANUAL",
-        notes: movementForm.notes,
-        createdAt: new Date().toISOString(),
-      };
-
-      setMovements((prev) => [newMovement, ...prev]);
-      setSelectedVariant(null);
-    } finally {
-      setSubmitting(false);
-    }
-  };
+    // Recargar los datos reales confirmados por la base de datos
+    await loadData();
+    setSelectedVariant(null);
+  } catch (err) {
+    // Mostrar el error genuino retornado por Express / PostgreSQL
+    const serverMessage =
+      err.response?.data?.message ||
+      err.message ||
+      "Error al registrar el movimiento en el servidor.";
+    console.error("[Inventory Error]:", serverMessage);
+    setErrorMsg(serverMessage);
+  } finally {
+    setSubmitting(false);
+  }
+};
 
   return (
     <div className="inventory-page">

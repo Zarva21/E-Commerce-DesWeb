@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useHeroSlides } from "../../context/HeroSlidesContext";
+import { HERO_SLIDES } from "./HeroSlides"; // Ajusta la ruta a donde tengas el archivo heroSlides.js
 import "./HeroCarousel.css";
 
 const ChevronLeft = () => (
@@ -15,14 +15,14 @@ const ChevronRight = () => (
 );
 
 export default function HeroCarousel({ onAction }) {
-  const { slides: allSlides } = useHeroSlides();
-  const slides = allSlides.filter((s) => s.active);
+  // Filtra los que están activos del arreglo fijo
+  const slides = HERO_SLIDES.filter((s) => s.active);
   const [index, setIndex] = useState(0);
   const total = slides.length;
 
   if (total === 0) return null;
 
-  const current = index >= total ? 0 : index; // por si se ocultó/eliminó el último slide
+  const current = index >= total ? 0 : index;
   const slide = slides[current];
 
   const goPrev = () => setIndex((current - 1 + total) % total);
@@ -38,7 +38,11 @@ export default function HeroCarousel({ onAction }) {
           <p className="hero-eyebrow">{slide.eyebrow}</p>
           <h1 className="hero-title">{slide.title}</h1>
           {slide.ctaLabel && slide.link?.type !== "none" && (
-            <button type="button" className="hero-cta" onClick={() => onAction?.(slide.link)}>
+            <button
+              type="button"
+              className="hero-cta"
+              onClick={() => onAction?.(slide.link)}
+            >
               {slide.ctaLabel}
             </button>
           )}

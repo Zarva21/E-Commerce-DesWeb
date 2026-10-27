@@ -3,7 +3,6 @@ import FilterPanel from "./FilterPanel";
 import ProductCard from "./ProductCard";
 import { catalogService } from "../../services/catalogService";
 import { DEFAULT_FILTERS } from "./filterOptions";
-import { getCategoryOptions } from "./CategoryOptions";
 import { normalize } from "../../utils/normalize";
 import "./CatalogSection.css";
 
@@ -17,7 +16,10 @@ function applyFilters(products, filters) {
   return products.filter((product) => {
     if (filters.categoria && normalize(product.category) !== normalize(filters.categoria)) return false;
     if (filters.marca && normalize(product.brand) !== normalize(filters.marca)) return false;
-    if (filters.oferta && !product.onSale) return false;
+
+    // Se removió el filtro de oferta para evitar que oculte productos
+    // si no existe la propiedad onSale en la base de datos
+
     if (product.price < filters.priceMin || product.price > filters.priceMax) return false;
     return true;
   });
@@ -26,10 +28,12 @@ function applyFilters(products, filters) {
 // Convierte el filtro que viene de un destacado del carrusel en filtros del catálogo
 function filtersFromHero(filter) {
   if (!filter) return DEFAULT_FILTERS;
-  if (filter.kind === "offers") return { ...DEFAULT_FILTERS, oferta: true };
+  // Si viene con tipo "offers", no bloqueamos nada y dejamos los filtros base
+  if (filter.kind === "offers") return { ...DEFAULT_FILTERS };
   if (filter.kind === "category") return { ...DEFAULT_FILTERS, categoria: filter.category };
   return DEFAULT_FILTERS;
 }
+
 // Valores únicos y ordenados de un campo de los productos
 const uniqueSorted = (products, field) =>
   [...new Set(products.map((p) => p[field]).filter(Boolean))].sort((a, b) => a.localeCompare(b, "es"));
@@ -50,7 +54,7 @@ export default function CatalogSection({ section, filter = null, onSelectSection
       .finally(() => setLoading(false));
   }, []);
 
-   // Si cambia el filtro del destacado (o se quita al navegar), se actualizan los filtros
+  // Si cambia el filtro del destacado (o se quita al navegar), se actualizan los filtros
   useEffect(() => {
     setFilters(filtersFromHero(filter));
   }, [filter]);
@@ -70,8 +74,7 @@ export default function CatalogSection({ section, filter = null, onSelectSection
 
   const categoryOptions = uniqueSorted(baseProducts, "category");
   const brandOptions = uniqueSorted(baseProducts, "brand");
-  
-  
+
   if (loading) {
     return (
       <section id="catalogo" className="catalog">
@@ -81,13 +84,6 @@ export default function CatalogSection({ section, filter = null, onSelectSection
       </section>
     );
   }
-
-  // Dentro de CatalogSection.jsx:
-console.log("1. Productos directos de la BD:", allProducts);
-console.log("2. BaseProducts tras filtro de sección:", baseProducts);
-console.log("3. Filtros activos actualmente:", filters);
-console.log("4. Productos que pasaron todos los filtros:", products);
-
 
   return (
     <section id="catalogo" className="catalog">

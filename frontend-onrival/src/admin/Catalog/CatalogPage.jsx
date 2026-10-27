@@ -748,15 +748,7 @@ export default function CatalogPage({
                             >
                               Editar
                             </button>
-                            {canToggle && (
-                              <button
-                                type="button"
-                                className="data-action-btn"
-                                onClick={() => handleToggleProductStatus(item.id)}
-                              >
-                                {item.is_active ? "Desactivar" : "Activar"}
-                              </button>
-                            )}
+                            
                             {canDelete && (
                               <button
                                 type="button"

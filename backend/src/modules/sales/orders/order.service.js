@@ -1,5 +1,6 @@
 const db = require("../../index.js");
 const inventoryService = require("../../inventory/inventory.service.js");
+const emailService = require("../../../services/email.service.js");
 
 const Order = db.order;
 const OrderItem = db.orderItem;
@@ -13,8 +14,7 @@ const Product = db.product;
 const OrderCoupon = db.orderCoupon;
 const Coupon = db.coupon;
 
-// orders es INMUTABLE en su contenido — nunca agregas/quitas un OrderItem.
-// Solo se permite mover `status` siguiendo transiciones válidas.
+// Transiciones de estado logístico permitidas
 const VALID_TRANSITIONS = {
   pending_payment: ["paid", "cancelled"],
   paid: ["shipped", "cancelled"],
@@ -24,8 +24,8 @@ const VALID_TRANSITIONS = {
 };
 
 /**
- * Listado completo para el panel de administración / empleados.
- * Incluye cliente, dirección, factura y estado del pago.
+ * Listado completo para el panel de administración / colaboradores.
+ * Incluye cliente, dirección, factura, pago, cupones y variantes completas.
  */
 exports.getAll = async (filters = {}) => {
   const where = {};
@@ -77,13 +77,13 @@ exports.getAll = async (filters = {}) => {
         ]
       }
     ],
-    order: [["created_at", "DESC"]]
+    order: [["created_at", "DESC"]],
   });
 
   return orders.map((ordInstance) => {
     const ord = ordInstance.toJSON ? ordInstance.toJSON() : ordInstance;
 
-    // 1. Extraer Cliente
+    // 1. Extraer datos del Cliente
     const cust = ord.customer || ord.Customer;
     let customerName = "Cliente General";
     let customerEmail = "—";
@@ -98,7 +98,7 @@ exports.getAll = async (filters = {}) => {
       customerEmail = cust.user?.email || cust.User?.email || cust.email || "—";
     }
 
-    // 2. Extraer Factura y Pago
+    // 2. Extraer Factura y Transacción de Pago
     const inv =
       (Array.isArray(ord.invoices) ? ord.invoices[0] : ord.invoices) ||
       (Array.isArray(ord.Invoices) ? ord.Invoices[0] : ord.Invoices) ||
@@ -124,7 +124,7 @@ exports.getAll = async (filters = {}) => {
       paymentStatus = ord.status === "paid" ? "completed" : "pending";
     }
 
-    // 3. Extraer Cupón aplicado
+    // 3. Extraer Cupón de Descuento
     const appliedCoupon =
       (Array.isArray(ord.order_coupons) ? ord.order_coupons[0] : ord.order_coupons) ||
       (Array.isArray(ord.OrderCoupons) ? ord.OrderCoupons[0] : ord.OrderCoupons) ||
@@ -153,14 +153,19 @@ exports.getAll = async (filters = {}) => {
       coupon_description: couponObj?.description || null,
       total: Number(ord.total || 0),
       address: ord.address || ord.Address || null,
-      items: (ord.order_items || ord.orderItems || []).map((it) => ({
-        id: it.id,
-        name: it.product_variant?.product?.name || "Artículo",
-        size: it.product_variant?.size || "Única",
-        color: it.product_variant?.color || null,
-        quantity: it.quantity,
-        price: Number(it.unit_price)
-      }))
+      items: (ord.order_items || ord.orderItems || []).map((it) => {
+        const variant = it.product_variant || it.ProductVariant || {};
+        const prod = variant.product || variant.Product || {};
+
+        return {
+          id: it.id,
+          name: prod.name || it.name || "Artículo Deportivo",
+          size: variant.size || it.size || "Única",
+          color: variant.color || it.color || null,
+          quantity: it.quantity,
+          price: Number(it.unit_price || it.price || 0),
+        };
+      }),
     };
   });
 };
@@ -188,6 +193,7 @@ exports.getById = async (id) => {
         include: [
           {
             model: ProductVariant,
+            attributes: ["id", "sku", "size", "color"],
             include: [{ model: Product, attributes: ["id", "name"] }],
           },
         ],
@@ -215,12 +221,19 @@ exports.getById = async (id) => {
 
 /**
  * Cambio de estado controlado.
- * - Si se cancela un pedido que ya descontó inventario ("paid"), devuelve stock en transacción.
- * - Si un pedido en efectivo pasa a "paid", actualiza el pago a "completed".
+ * - Repone inventario automáticamente si se cancela un pedido pagado/enviado.
+ * - Liquida el pago en efectivo si pasa de pending_payment a paid.
+ * - Dispara correo al cliente con Resend tras el commit exitoso.
  */
 exports.updateStatus = async (id, newStatus, employeeId = null) => {
   const order = await Order.findByPk(id, {
-    include: [{ model: Invoice, include: [{ model: Payment }] }],
+    include: [
+      { model: Invoice, include: [{ model: Payment }] },
+      {
+        model: Customer,
+        include: [{ model: User, attributes: ["email"] }],
+      },
+    ],
   });
 
   if (!order) {
@@ -237,7 +250,7 @@ exports.updateStatus = async (id, newStatus, employeeId = null) => {
   }
 
   await db.sequelize.transaction(async (t) => {
-    // 1. Reposición de inventario en cancelaciones
+    // 1. Reposición de stock si se cancela un pedido pagado o enviado
     if (newStatus === "cancelled" && (order.status === "paid" || order.status === "shipped")) {
       const items = await OrderItem.findAll({ where: { order_id: id }, transaction: t });
       await inventoryService.restockForCancellation(
@@ -248,7 +261,7 @@ exports.updateStatus = async (id, newStatus, employeeId = null) => {
       );
     }
 
-    // 2. Liquidación de pago en efectivo
+    // 2. Liquidación de pago contra entrega si pasa a 'paid'
     if (order.status === "pending_payment" && newStatus === "paid") {
       const invoice = Array.isArray(order.invoices) ? order.invoices[0] : order.invoice;
       const payment = Array.isArray(invoice?.payments) ? invoice?.payments[0] : invoice?.payment;
@@ -260,21 +273,43 @@ exports.updateStatus = async (id, newStatus, employeeId = null) => {
       }
     }
 
-    // 3. Guardar nuevo estado
+    // 3. Persistir nuevo estado logístico
     order.status = newStatus;
     await order.save({ transaction: t });
   });
+
+  // 4. DISPARAR CORREO DE ACTUALIZACIÓN CON RESEND TRAS EL COMMIT
+  const targetEmail =
+    order.customer?.user?.email ||
+    order.Customer?.User?.email ||
+    order.customer?.email ||
+    order.Customer?.email;
+
+  if (targetEmail && emailService && emailService.sendOrderStatusUpdate) {
+    emailService
+      .sendOrderStatusUpdate({
+        email: targetEmail,
+        orderNumber: order.order_number,
+        newStatus,
+      })
+      .catch((err) => {
+        console.error(
+          `[Resend Error] No se pudo enviar notificación de estado (${newStatus}):`,
+          err.message
+        );
+      });
+  }
 
   return order;
 };
 
 /**
- * Consulta de pedidos propios del cliente (Storefront)
+ * Consulta de pedidos propios del cliente (Storefront - Perfil)
  */
 exports.getOrdersByUserId = async (userId) => {
   const customer = await Customer.findOne({ where: { user_id: userId } });
   if (!customer) {
-    return []; // Si el usuario no tiene perfil de cliente aún, retorna array vacío sin reventar 404
+    return [];
   }
 
   const orders = await Order.findAll({
@@ -331,12 +366,13 @@ exports.getOrdersByUserId = async (userId) => {
       items: items.map((item) => {
         const variant = item.product_variant || item.ProductVariant || {};
         const prod = variant.product || variant.Product || {};
+
         return {
-          name: prod.name || "Producto",
-          size: variant.size || "Única",
-          color: variant.color || null,
+          name: prod.name || item.name || "Producto OnRival",
+          size: variant.size || item.size || "Única",
+          color: variant.color || item.color || null,
           quantity: item.quantity,
-          price: Number(item.unit_price || 0),
+          price: Number(item.unit_price || item.price || 0),
         };
       }),
     };
@@ -344,11 +380,17 @@ exports.getOrdersByUserId = async (userId) => {
 };
 
 /**
- * Liquida exclusivamente el pago en efectivo (CASH) y actualiza el estado de la orden
+ * Liquida exclusivamente el cobro en efectivo (CASH) y actualiza el estado
  */
 exports.collectCashPayment = async (orderId, employeeId = null) => {
   const order = await Order.findByPk(orderId, {
-    include: [{ model: Invoice, include: [{ model: Payment }] }],
+    include: [
+      { model: Invoice, include: [{ model: Payment }] },
+      {
+        model: Customer,
+        include: [{ model: User, attributes: ["email"] }],
+      },
+    ],
   });
 
   if (!order) {
@@ -376,22 +418,48 @@ exports.collectCashPayment = async (orderId, employeeId = null) => {
     return { message: "El pedido ya fue cobrado previamente.", order, payment };
   }
 
+  let statusChangedToPaid = false;
+
   await db.sequelize.transaction(async (t) => {
     payment.status = "completed";
     payment.payment_date = new Date();
     await payment.save({ transaction: t });
 
-    // Si la orden estaba esperando pago, se activa a 'paid' (en preparación)
+    // Si la orden estaba en espera de cobro, avanza a preparación ('paid')
     if (order.status === "pending_payment") {
       order.status = "paid";
       await order.save({ transaction: t });
+      statusChangedToPaid = true;
     }
   });
+
+  // Notificar por correo si el estado avanzó a pagado
+  if (statusChangedToPaid) {
+    const targetEmail =
+      order.customer?.user?.email ||
+      order.Customer?.User?.email ||
+      order.customer?.email;
+
+    if (targetEmail && emailService && emailService.sendOrderStatusUpdate) {
+      emailService
+        .sendOrderStatusUpdate({
+          email: targetEmail,
+          orderNumber: order.order_number,
+          newStatus: "paid",
+        })
+        .catch((err) => {
+          console.error(
+            "[Resend Error] Error notificando cobro en efectivo:",
+            err.message
+          );
+        });
+    }
+  }
 
   return {
     message: "Cobro liquidado con éxito.",
     payment_status: "completed",
     paid_at: payment.payment_date,
-    order_status: order.status
+    order_status: order.status,
   };
 };

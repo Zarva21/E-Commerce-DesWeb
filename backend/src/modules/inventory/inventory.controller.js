@@ -1,4 +1,24 @@
 const inventoryService = require("./inventory.service.js");
+const db = require("../index.js");
+
+const Employee = db.employee || db.Employee;
+
+/**
+ * Si es empleado, obtiene su employees.id (ej: 3 para user_id 71).
+ * Si es admin (o no tiene registro en employees), retorna null limpiamente.
+ */
+async function resolveEmployeeId(userId) {
+  if (!userId) return null;
+  try {
+    if (Employee) {
+      const emp = await Employee.findOne({ where: { user_id: userId } });
+      if (emp) return emp.id; // Retorna el ID de la tabla employees
+    }
+    return null; // Si es admin o no existe en employees, queda en NULL
+  } catch {
+    return null;
+  }
+}
 
 exports.getAllStock = async (req, res) => {
   try {
@@ -40,11 +60,16 @@ exports.getMovementHistory = async (req, res) => {
 exports.receive = async (req, res) => {
   try {
     const { product_variant_id, quantity, reference, notes } = req.body;
-    const employee_id = req.userId;
+
+    if (!product_variant_id || !quantity) {
+      return res.status(400).send({ message: "Variante y cantidad son obligatorios." });
+    }
+
+    const employee_id = await resolveEmployeeId(req.userId);
 
     const result = await inventoryService.receiveFromSupplier({
-      product_variant_id,
-      quantity,
+      product_variant_id: Number(product_variant_id),
+      quantity: Number(quantity),
       employee_id,
       reference,
       notes,
@@ -59,11 +84,16 @@ exports.receive = async (req, res) => {
 exports.adjust = async (req, res) => {
   try {
     const { product_variant_id, quantity, movement_type, notes, reference } = req.body;
-    const employee_id = req.userId;
+
+    if (!product_variant_id || !quantity || !movement_type) {
+      return res.status(400).send({ message: "Faltan parámetros para realizar el ajuste." });
+    }
+
+    const employee_id = await resolveEmployeeId(req.userId);
 
     const result = await inventoryService.adjustStock({
-      product_variant_id,
-      quantity,
+      product_variant_id: Number(product_variant_id),
+      quantity: Number(quantity),
       movement_type,
       employee_id,
       notes,

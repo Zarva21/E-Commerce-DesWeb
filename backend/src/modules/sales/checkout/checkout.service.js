@@ -2,6 +2,7 @@ const db = require("../../index.js");
 const cartService = require("../carts/cart.service.js");
 const inventoryService = require("../../inventory/inventory.service.js");
 const marketingService = require("../../marketing/marketing.service.js");
+const emailService = require("../../../services/email.service.js");
 const stripe = require("../../../config/stripe.config.js");
 const businessConfig = require("../../../config/business.js");
 
@@ -63,12 +64,8 @@ const computeTotals = async (cartId, couponCode, customerId, shippingCost = 35) 
   return { cart, subtotal, discount, tax, shipping_cost: shipping, total, appliedCoupon };
 };
 
-const resolveGuestIdentity = async (
-  guestData, // Recibimos el objeto completo
-  transaction
-) => {
+const resolveGuestIdentity = async (guestData, transaction) => {
   const email = guestData.email;
-  // Soportar first_name (snake_case) o firstName (camelCase)
   const firstName = (guestData.first_name || guestData.firstName || "Cliente").trim();
   const lastName = (guestData.last_name || guestData.lastName || "Invitado").trim();
   const phone = guestData.phone || guestData.telefono || null;
@@ -111,39 +108,40 @@ const resolveGuestIdentity = async (
     { transaction }
   );
 
-  return { customer, address: newAddress };
+  return { customer, address: newAddress, userEmail: email };
 };
 
 const resolveAuthenticatedIdentity = async ({ userId, addressId, guestData }, transaction) => {
-  const customer = await Customer.findOne({ where: { user_id: userId }, transaction });
+  const customer = await Customer.findOne({
+    where: { user_id: userId },
+    include: [{ model: User, attributes: ["email"] }],
+    transaction,
+  });
   if (!customer) throw httpError("No se encontró un perfil de cliente para este usuario.", 404);
 
   let address = null;
 
-  // 1. Si mandó un ID válido, buscar esa dirección específica
   if (addressId) {
     address = await Address.findOne({
       where: { id: addressId, customer_id: customer.id },
-      transaction
+      transaction,
     });
   }
 
-  // 2. Si no mandó ID pero el usuario ya tenía direcciones en BD, tomar la principal
   if (!address && !guestData?.address) {
     address = await Address.findOne({
       where: { customer_id: customer.id },
       order: [["is_default", "DESC"], ["created_at", "DESC"]],
-      transaction
+      transaction,
     });
   }
 
-  // 3. Si mandó una dirección nueva en el formulario (guestData.address), crearla en la BD asociada a este customer
   if (!address && guestData?.address) {
     address = await Address.create(
       {
         customer_id: customer.id,
         ...guestData.address,
-        is_default: false
+        is_default: false,
       },
       { transaction }
     );
@@ -153,7 +151,11 @@ const resolveAuthenticatedIdentity = async ({ userId, addressId, guestData }, tr
     throw httpError("No se encontró ni se pudo registrar una dirección de entrega válida.", 400);
   }
 
-  return { customer, address };
+  return {
+    customer,
+    address,
+    userEmail: customer.user?.email || customer.email || guestData?.email,
+  };
 };
 
 exports.createIntent = async ({ cartId, couponCode, userId, shippingCost = 35 }) => {
@@ -176,7 +178,7 @@ exports.createIntent = async ({ cartId, couponCode, userId, shippingCost = 35 })
   );
 
   const paymentIntent = await stripe.paymentIntents.create({
-    amount: Math.round(total * 100), // Monto exacto en centavos (ej: Q135.00 -> 13500)
+    amount: Math.round(total * 100),
     currency: "usd",
     metadata: {
       cart_id: String(cartId),
@@ -236,52 +238,57 @@ exports.confirmCheckout = async ({
 
   let stripeIntent = null;
 
-if (paymentMethod === "CARD") {
-  const amountInCents = Math.round(total * 100);
+  if (paymentMethod === "CARD") {
+    const amountInCents = Math.round(total * 100);
 
-  // Flujo con token seguro generado por Stripe Elements
-  if (paymentMethodId) {
-    try {
-      stripeIntent = await stripe.paymentIntents.create({
-        amount: amountInCents,
-        currency: "usd",
-        payment_method: paymentMethodId,
-        confirm: true,
-        automatic_payment_methods: {
-          enabled: true,
-          allow_redirects: "never",
-        },
-        metadata: {
-          cart_id: String(cartId),
-        },
-      });
-    } catch (stripeErr) {
-      throw httpError(`Error de pago en Stripe: ${stripeErr.message}`, 400);
+    if (paymentMethodId) {
+      try {
+        stripeIntent = await stripe.paymentIntents.create({
+          amount: amountInCents,
+          currency: "usd",
+          payment_method: paymentMethodId,
+          confirm: true,
+          automatic_payment_methods: {
+            enabled: true,
+            allow_redirects: "never",
+          },
+          metadata: {
+            cart_id: String(cartId),
+          },
+        });
+      } catch (stripeErr) {
+        throw httpError(`Error de pago en Stripe: ${stripeErr.message}`, 400);
+      }
+    } else if (stripePaymentIntentId) {
+      stripeIntent = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
+      if (stripeIntent.metadata.cart_id !== String(cartId)) {
+        throw httpError("El PaymentIntent no corresponde a este carrito.", 400);
+      }
+      if (stripeIntent.amount !== amountInCents) {
+        throw httpError("El monto cobrado no coincide con el total actual del carrito.", 409);
+      }
+    } else {
+      throw httpError("Falta el método de pago (payment_method_id o stripe_payment_intent_id).", 400);
     }
-  } 
-  // Flujo alternativo (por si se envía un intent ya creado previamente)
-  else if (stripePaymentIntentId) {
-    stripeIntent = await stripe.paymentIntents.retrieve(stripePaymentIntentId);
-    if (stripeIntent.metadata.cart_id !== String(cartId)) {
-      throw httpError("El PaymentIntent no corresponde a este carrito.", 400);
-    }
-    if (stripeIntent.amount !== amountInCents) {
-      throw httpError("El monto cobrado no coincide con el total actual del carrito.", 409);
-    }
-  } else {
-    throw httpError("Falta el método de pago (payment_method_id o stripe_payment_intent_id).", 400);
-  }
 
-  if (stripeIntent.status !== "succeeded") {
-    throw httpError(`El pago no se ha completado en Stripe (status: ${stripeIntent.status}).`, 402);
+    if (stripeIntent.status !== "succeeded") {
+      throw httpError(`El pago no se ha completado en Stripe (status: ${stripeIntent.status}).`, 402);
+    }
   }
-}
 
   const t = await db.sequelize.transaction();
+  let resolvedEmail = null;
+  let resolvedName = "Cliente";
+  let createdOrder = null;
+  let createdInvoice = null;
+
   try {
-    const { customer, address } = userId
+    const { customer, address, userEmail } = userId
       ? await resolveAuthenticatedIdentity({ userId, addressId, guestData }, t)
       : await resolveGuestIdentity(guestData, t);
+
+    resolvedEmail = userEmail || guestData?.email;
+    resolvedName = `${customer.first_name || ""} ${customer.last_name || ""}`.trim() || "Cliente";
 
     await cartService.attachCustomerToCart(cartId, customer.id, t);
 
@@ -300,6 +307,7 @@ if (paymentMethod === "CARD") {
       },
       { transaction: t }
     );
+    createdOrder = order;
 
     for (const item of cart.items) {
       await OrderItem.create(
@@ -347,6 +355,7 @@ if (paymentMethod === "CARD") {
       },
       { transaction: t }
     );
+    createdInvoice = invoice;
 
     await Payment.create(
       {
@@ -362,7 +371,45 @@ if (paymentMethod === "CARD") {
 
     await cartService.clearCart(cartId, t);
 
+    // Confirmación en BD
     await t.commit();
+
+    // 3. ENVÍO DE CORREO CON PDF ADJUNTO TRAS EL COMMIT EXITOSO
+    if (resolvedEmail && emailService && emailService.sendOrderConfirmation) {
+  // Obtenemos las variantes completas con su producto para garantizar nombre, talla y color
+  const variantIds = cart.items.map((i) => i.product_variant_id);
+  const variantsFromDb = await db.productVariant.findAll({
+    where: { id: variantIds },
+    include: [{ model: db.product, attributes: ["name"] }],
+  });
+
+  const variantMap = new Map(variantsFromDb.map((v) => [v.id, v]));
+
+  const itemsForEmail = cart.items.map((item) => {
+    const v = variantMap.get(item.product_variant_id) || item.product_variant || {};
+    const prod = v.product || item.product || {};
+
+    return {
+      name: item.product_name || prod.name || item.name || "Producto OnRival",
+      size: item.size || v.size || "Única",
+      color: item.color || v.color || null, // 👈 Se extrae el color real de la variante
+      quantity: Number(item.quantity),
+      price: Number(item.unit_price || item.price || 0),
+    };
+  });
+
+  emailService
+    .sendOrderConfirmation({
+      email: resolvedEmail,
+      customerName: resolvedName,
+      order: createdOrder,
+      invoice: createdInvoice,
+      items: itemsForEmail,
+    })
+    .catch((err) => {
+      console.error("[Email Error] Error enviando correo de confirmación de compra:", err.message);
+    });
+}
 
     return {
       order_id: order.id,
@@ -373,7 +420,6 @@ if (paymentMethod === "CARD") {
   } catch (err) {
     await t.rollback();
 
-    // Si Stripe ya había cobrado y la transacción de BD colapsó, se reembolsa de inmediato
     if (stripeIntent && stripeIntent.status === "succeeded") {
       try {
         await stripe.refunds.create({ payment_intent: stripeIntent.id });
@@ -387,7 +433,4 @@ if (paymentMethod === "CARD") {
 
     throw err;
   }
-  
-
-  
 };

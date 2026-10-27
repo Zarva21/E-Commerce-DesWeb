@@ -77,16 +77,7 @@ export default function FilterPanel({ open, value, categoryOptions = [], brandOp
             />
           </div>
 
-          <div className="filter-group">
-            <p className="filter-group-title">Oferta</p>
-            <button
-              type="button"
-              className={`filter-chip ${draft.oferta ? "filter-chip-active" : ""}`}
-              onClick={() => setDraft((d) => ({ ...d, oferta: !d.oferta }))}
-            >
-              Solo en oferta
-            </button>
-          </div>
+          
         </div>
 
         <div className="filter-panel-footer">

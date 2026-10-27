@@ -9,7 +9,6 @@ const NAV_ITEMS = [
   { id: "pedidos", label: "Pedidos" },
   { id: "reportes", label: "Reportes" },
   { id: "ofertas", label: "Ofertas" },
-  { id: "destacados", label: "Destacados" },
 ];
 
 export default function Sidebar({ activeView, onSelectView, onExitAdmin, allowedViews }) {

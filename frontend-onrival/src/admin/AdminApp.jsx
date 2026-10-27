@@ -11,10 +11,10 @@ import OffersPage from "./Offers/OffersPage";
 import HeroSlidesPage from "./Destacados/HeroSlidesPage";
 import { getPermissions } from "./permissions";
 
-// Panel compartido por admin y empleado: los permisos del rol deciden
+// Panel compartido por admin y employee: los permisos del rol deciden
 // qué secciones aparecen y qué acciones están habilitadas.
-// Se monta desde App.jsx cuando el usuario logueado tiene rol "admin" o "empleado".
-export default function AdminApp({ role = "empleado", onExitAdmin }) {
+// Se monta desde App.jsx cuando el usuario logueado tiene rol "admin" o "employee".
+export default function AdminApp({ role = "employee", onExitAdmin }) {
   const permissions = getPermissions(role);
 
   const [view, setView] = useState("dashboard");

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCart } from "./context/CartContext";
 
 import { authService } from "./services/authService";
@@ -14,17 +14,24 @@ import CartPage from "./components/Cart/CartPage";
 import ProfilePage from "./components/Profile/ProfilePage";
 import ShippingPage from "./components/Checkout/ShippingPage";
 import CheckoutPage from "./components/Checkout/CheckoutPage";
+import ResetPasswordPage from "./components/Auth/ResetPasswordPage";
 import AdminApp from "./admin/AdminApp";
 import "./styles/tokens.css";
 
 // Roles que entran al panel de administración (cada uno con sus permisos)
-const PANEL_ROLES = ["admin", "empleado"];
+const PANEL_ROLES = ["admin", "employee"];
 
 export default function App() {
   const { count } = useCart();
 
-  // "home" | "catalog" | "product" | "cart" | "shipping" | "checkout" | "admin"
-  const [view, setView] = useState(() => (authService.getUserRole() === "admin" ? "admin" : "home"));
+  // Detección inicial: Si viene con token de recuperación de contraseña en la URL
+  const [view, setView] = useState(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get("token") || window.location.pathname === "/reset-password") {
+      return "reset-password";
+    }
+    return authService.getUserRole() === "admin" ? "admin" : "home";
+  });
   
   const [activeSection, setActiveSection] = useState(null);
   const [selectedProductId, setSelectedProductId] = useState(null);
@@ -40,9 +47,21 @@ export default function App() {
   const [loginOpen, setLoginOpen] = useState(false);
   const [loginTab, setLoginTab] = useState("login");
 
+  // Escuchar si la URL cambia a reset-password
+  useEffect(() => {
+    const checkResetToken = () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("token") || window.location.pathname === "/reset-password") {
+        setView("reset-password");
+      }
+    };
+    window.addEventListener("popstate", checkResetToken);
+    return () => window.removeEventListener("popstate", checkResetToken);
+  }, []);
+
   const handleSelectSection = (sectionId) => {
     setActiveSection(sectionId);
-    setCatalogFilter(null); // navegar normal quita el filtro del destacado
+    setCatalogFilter(null);
     setView("catalog");
   };
   const handleSelectProduct = (productId) => { setSelectedProductId(productId); setView("product"); };
@@ -50,7 +69,6 @@ export default function App() {
   const handleOpenCart = () => setView("cart");
   const handleOpenProfile = () => setView("profile");
 
-  // Lo que pasa al darle click al botón de un destacado del carrusel
   const handleHeroAction = (link) => {
     if (link.type === "product") {
       handleSelectProduct(link.productId);
@@ -81,9 +99,16 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    authService.logout(); // Limpia accessToken y user de localStorage
+    authService.logout();
     setUserRole(null);
     setView("home");
+  };
+
+  // Función al terminar de restablecer contraseña o pulsar "Iniciar Sesión"
+  const handleFinishResetPassword = () => {
+    window.history.replaceState({}, document.title, window.location.pathname.replace("/reset-password", "") || "/");
+    setView("home");
+    openLogin("login");
   };
 
   if (view === "admin" && PANEL_ROLES.includes(userRole)) {
@@ -157,6 +182,11 @@ export default function App() {
             setView("home");
           }}
         />
+      )}
+
+      {/* RENDERIZADO DE LA PANTALLA DE RESTABLECIMIENTO */}
+      {view === "reset-password" && (
+        <ResetPasswordPage onNavigateLogin={handleFinishResetPassword} />
       )}
 
       <LoginPanel

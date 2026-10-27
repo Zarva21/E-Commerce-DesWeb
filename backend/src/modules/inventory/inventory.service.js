@@ -11,17 +11,16 @@ const ProductImage = db.productImage;
 // Tipos de movimiento estandarizados 
 // siempre importa esta constante para evitar typos que rompan reportes/filtros después.
 const MOVEMENT_TYPES = {
-  PURCHASE_IN: "PURCHASE_IN",               // Entrada_Compra (recepción de proveedor)
-  ADJUSTMENT_IN: "ADJUSTMENT_IN",           // Ajuste positivo de conteo manual
-  ADJUSTMENT_OUT: "ADJUSTMENT_OUT",         // Ajuste negativo de conteo manual
-  SALE_OUT: "SALE_OUT",                     // Salida_Venta (checkout confirmado)
-  SALE_RETURN_IN: "SALE_RETURN_IN",         // Reingreso por cancelación/devolución
-  DAMAGE_OUT: "DAMAGE_OUT",                 // Salida_Defecto (mermas)
-  SUPPLIER_RETURN_OUT: "SUPPLIER_RETURN_OUT"// Salida_Devolucion_Proveedor
+  PURCHASE_IN: "PURCHASE_IN",
+  ADJUSTMENT_IN: "ADJUSTMENT_IN",
+  ADJUSTMENT_OUT: "ADJUSTMENT_OUT",
+  SALE_OUT: "SALE_OUT",
+  SALE_RETURN_IN: "SALE_RETURN_IN",
+  DAMAGE_OUT: "DAMAGE_OUT",
+  SUPPLIER_RETURN_OUT: "SUPPLIER_RETURN_OUT",
 };
 exports.MOVEMENT_TYPES = MOVEMENT_TYPES;
 
-// Tipos permitidos para el formulario administrativo:
 const ADMIN_ADJUSTABLE_TYPES = [
   MOVEMENT_TYPES.PURCHASE_IN,
   MOVEMENT_TYPES.ADJUSTMENT_IN,
@@ -30,65 +29,64 @@ const ADMIN_ADJUSTABLE_TYPES = [
   MOVEMENT_TYPES.SUPPLIER_RETURN_OUT
 ];
 
-
 /**
- * recordMovement — LA función de doble escritura. Todo lo demás en este archivo
- * es un caso de uso específico que termina llamando a esta.
- *
- * SIEMPRE hace, dentro de la MISMA transacción:
- *   1. Bloquea la fila de `stock` (row-level lock) para que dos ventas
- *      simultáneas no lean el mismo número y sobrevendan.
- *   2. Valida que el resultado no quede negativo.
- *   3. Inserta el historial en `inventory_movements`.
- *   4. Actualiza el total en `stock`.
- *
- * @param {number} quantityDelta  positivo = entra stock, negativo = sale stock
- * @param {import("sequelize").Transaction} transaction  OBLIGATORIO — nunca se llama sin transacción
+ * Función central de doble escritura (stocks + inventory_movements).
+ * Exige una transacción activa y aplica row-level lock.
  */
 const recordMovement = async (
   { product_variant_id, quantityDelta, movement_type, employee_id = null, reference = null, notes = null },
   transaction
 ) => {
   if (!transaction) {
-    throw new Error("recordMovement() requiere una transacción explícita — nunca se llama a pelo.");
+    throw new Error("recordMovement() requiere una transacción explícita.");
   }
 
-  // Row-Level Lock: mientras esta transacción no termine (commit/rollback),
-  // ninguna otra transacción puede leer/escribir esta misma fila de stock.
-  // Esto es lo que evita que dos compras simultáneas vendan la última unidad dos veces.
-  
-  // Buscamos el stock y lo bloqueamos
+  const pVarId = Number(product_variant_id);
+  const delta = parseInt(quantityDelta, 10);
+
+  // 1. Bloqueo pesimista de la fila en stocks
   let stock = await Stock.findOne({
-    where: { product_variant_id },
+    where: { product_variant_id: pVarId },
     transaction,
-    lock: transaction.LOCK.UPDATE
+    lock: transaction.LOCK.UPDATE,
   });
 
-  // --- EL FIX EMPIEZA AQUÍ ---
-  // Si la fila no existe (producto nuevo), la creamos con 0 unidades en esta misma transacción
+  // 2. Si no existe en la tabla stocks (producto nuevo), se crea inicializado en 0
   if (!stock) {
     stock = await Stock.create(
-      { 
-        product_variant_id, 
-        quantity_on_hand: 0, 
-        reorder_level: 5 // Nivel de alerta por defecto
+      {
+        product_variant_id: pVarId,
+        quantity_on_hand: 0,
+        reorder_level: 5,
       },
       { transaction }
     );
   }
 
-  const newQuantity = stock.quantity_on_hand + quantityDelta;
+  const currentQty = parseInt(stock.quantity_on_hand || 0, 10);
+  const newQuantity = currentQty + delta;
+
+  // 3. Validación de saldo negativo
   if (newQuantity < 0) {
-    const error = new Error(`Stock insuficiente para la variante ${product_variant_id}.`);
-    error.status = 409; // Conflict
+    const error = new Error(`Stock insuficiente para la variante #${pVarId}. Existencias actuales: ${currentQty}`);
+    error.status = 409;
     throw error;
   }
 
+  // 4. Registro en el historial de movimientos
   await InventoryMovement.create(
-    { product_variant_id, employee_id, movement_type, quantity: quantityDelta, reference, notes },
+    {
+      product_variant_id: pVarId,
+      employee_id: employee_id ? Number(employee_id) : null,
+      movement_type,
+      quantity: delta,
+      reference: reference || "AJUSTE",
+      notes: notes || null,
+    },
     { transaction }
   );
 
+  // 5. Persistir nuevo valor en stocks
   stock.quantity_on_hand = newQuantity;
   await stock.save({ transaction });
 
@@ -96,11 +94,6 @@ const recordMovement = async (
 };
 exports.recordMovement = recordMovement;
 
-/**
- * deductStockForCheckout — la función CRÍTICA que Sales llama durante el checkout.
- * items: [{ product_variant_id, quantity }]
- * Se ejecuta DENTRO de la transacción ACID de la venta (Sales pasa su propio `t`).
- */
 exports.deductStockForCheckout = async (items, transaction, employee_id = null) => {
   const updated = [];
   for (const item of items) {
@@ -110,7 +103,7 @@ exports.deductStockForCheckout = async (items, transaction, employee_id = null) 
         quantityDelta: -Math.abs(item.quantity),
         movement_type: MOVEMENT_TYPES.SALE_OUT,
         employee_id,
-        reference: "checkout"
+        reference: "checkout",
       },
       transaction
     );
@@ -119,10 +112,6 @@ exports.deductStockForCheckout = async (items, transaction, employee_id = null) 
   return updated;
 };
 
-/**
- * restockForCancellation — reversa de una venta (pedido pagado que se cancela).
- * También necesita transacción explícita (normalmente la abre order.service.js).
- */
 exports.restockForCancellation = async (items, transaction, employee_id = null, reference = "order-cancelled") => {
   for (const item of items) {
     await recordMovement(
@@ -131,59 +120,33 @@ exports.restockForCancellation = async (items, transaction, employee_id = null, 
         quantityDelta: Math.abs(item.quantity),
         movement_type: MOVEMENT_TYPES.SALE_RETURN_IN,
         employee_id,
-        reference
+        reference,
       },
       transaction
     );
   }
 };
 
-/**
- * receiveFromSupplier — endpoint administrativo, abre su PROPIA transacción
- * (no depende de ningún flujo de Sales).
- */
 exports.receiveFromSupplier = async ({ product_variant_id, quantity, employee_id, reference, notes }) => {
   return db.sequelize.transaction((t) =>
     recordMovement(
-      { product_variant_id, quantityDelta: Math.abs(quantity), movement_type: MOVEMENT_TYPES.PURCHASE_IN, employee_id, reference, notes },
+      {
+        product_variant_id,
+        quantityDelta: Math.abs(Number(quantity)),
+        movement_type: MOVEMENT_TYPES.PURCHASE_IN,
+        employee_id,
+        reference: reference || "Recepción Proveedor",
+        notes,
+      },
       t
     )
   );
 };
-
-/**
- * registerDamage — baja por producto dañado. Nunca un UPDATE directo a `stock`.
- */
-exports.registerDamage = async ({ product_variant_id, quantity, employee_id, notes }) => {
-  return db.sequelize.transaction((t) =>
-    recordMovement(
-      { product_variant_id, quantityDelta: -Math.abs(quantity), movement_type: MOVEMENT_TYPES.DAMAGE_OUT, employee_id, notes },
-      t
-    )
-  );
-};
-
-exports.registerSupplierReturn = async ({ product_variant_id, quantity, employee_id, notes }) => {
-  return db.sequelize.transaction((t) =>
-    recordMovement(
-      { product_variant_id, quantityDelta: -Math.abs(quantity), movement_type: MOVEMENT_TYPES.SUPPLIER_RETURN_OUT, employee_id, notes },
-      t
-    )
-  );
-};
-
-/**
- * adjustStock — endpoint genérico POST /adjust.
- * Solo acepta los tipos de movimiento que un admin puede disparar MANUALMENTE.
- * SALE_OUT y SALE_RETURN_IN quedan fuera a propósito: esos los disparan
- * checkout.service.js y order.service.js internamente, nunca un humano a mano.
- */
-
 
 exports.adjustStock = async ({ product_variant_id, quantity, movement_type, employee_id, notes, reference }) => {
   if (!ADMIN_ADJUSTABLE_TYPES.includes(movement_type)) {
     const error = new Error(
-      `Tipo de movimiento no permitido para ajuste manual: "${movement_type}". Usa uno de: ${ADMIN_ADJUSTABLE_TYPES.join(", ")}.`
+      `Tipo de movimiento no permitido: "${movement_type}". Permitidos: ${ADMIN_ADJUSTABLE_TYPES.join(", ")}.`
     );
     error.status = 400;
     throw error;
@@ -191,12 +154,11 @@ exports.adjustStock = async ({ product_variant_id, quantity, movement_type, empl
 
   const rawQty = Number(quantity);
   if (!rawQty || rawQty <= 0) {
-    const error = new Error("La cantidad debe ser un número mayor a cero.");
+    const error = new Error("La cantidad debe ser mayor a cero.");
     error.status = 400;
     throw error;
   }
 
-  // Determinar si entra (+) o sale (-)
   const isIncoming = [MOVEMENT_TYPES.PURCHASE_IN, MOVEMENT_TYPES.ADJUSTMENT_IN].includes(movement_type);
   const delta = isIncoming ? Math.abs(rawQty) : -Math.abs(rawQty);
 
@@ -208,19 +170,17 @@ exports.adjustStock = async ({ product_variant_id, quantity, movement_type, empl
         movement_type,
         employee_id,
         reference: reference || "Ajuste manual administrativo",
-        notes
+        notes,
       },
       t
     )
   );
 };
 
-// --- Lecturas (no tocan stock, solo consultan) ---
-
 exports.getStockByVariant = async (product_variant_id) => {
   const stock = await Stock.findOne({ where: { product_variant_id } });
   if (!stock) {
-    const error = new Error("No existe stock para esa variante.");
+    const error = new Error("No existe registro de stock para esa variante.");
     error.status = 404;
     throw error;
   }
@@ -228,12 +188,11 @@ exports.getStockByVariant = async (product_variant_id) => {
 };
 
 exports.getAllStock = async () => {
-  // Partimos de ProductVariant con include hacia Stock (LEFT JOIN)
   const variants = await ProductVariant.findAll({
     include: [
       {
         model: Stock,
-        required: false
+        required: false, // LEFT JOIN
       },
       {
         model: Product,
@@ -241,9 +200,9 @@ exports.getAllStock = async () => {
         include: [
           { model: Brand, attributes: ["id", "name"] },
           { model: Category, attributes: ["id", "name"] },
-          { 
-            model: ProductImage, 
-            attributes: ["id", "image_url", "is_primary", "display_order"] 
+          {
+            model: ProductImage,
+            attributes: ["id", "image_url", "is_primary", "display_order"],
           },
         ],
       },
@@ -267,8 +226,8 @@ exports.getAllStock = async () => {
       images[0]?.image_url ||
       "/img/placeholder.png";
 
-    const qty = stockRecord ? Number(stockRecord.quantity_on_hand) : 0;
-    const reorder = stockRecord ? Number(stockRecord.reorder_level) : 5;
+    const qty = stockRecord ? parseInt(stockRecord.quantity_on_hand, 10) : 0;
+    const reorder = stockRecord ? parseInt(stockRecord.reorder_level, 10) : 5;
 
     let stockStatus = "in_stock";
     if (qty === 0) {
@@ -302,7 +261,6 @@ exports.getAllStock = async () => {
   });
 };
 
-// Alertas de reabastecimiento: quantity_on_hand <= reorder_level
 exports.getLowStock = () =>
   Stock.findAll({
     where: db.Sequelize.where(

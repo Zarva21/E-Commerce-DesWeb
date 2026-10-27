@@ -1,58 +1,90 @@
+// src/middlewares/auth.middleware.js
 const jwt = require("jsonwebtoken");
 const authConfig = require("../config/auth.config.js");
 const db = require("../modules/index.js");
 
 const User = db.user;
 const Role = db.role;
+const Customer = db.customer;
 
+/**
+ * 1. verifyToken: Decodifica JWT e inyecta userId y userRole
+ */
 const verifyToken = (req, res, next) => {
   let token = req.headers["x-access-token"] || req.headers["authorization"];
-
-  if (token && token.startsWith("Bearer ")) {
-    token = token.slice(7, token.length);
-  }
 
   if (!token) {
     return res.status(403).send({ message: "No token provided!" });
   }
 
-  jwt.verify(token, authConfig.secret, (err, decoded) => {
+  if (token.startsWith("Bearer ")) {
+    token = token.slice(7, token.length);
+  }
+
+  jwt.verify(token, authConfig.secret, async (err, decoded) => {
     if (err) {
       return res.status(401).send({ message: "Failed to authenticate token!" });
     }
+
     req.userId = decoded.id;
     req.roleId = decoded.role_id;
-    next();
+
+    // Si el payload del token ya traía el nombre del rol (ej: decoded.role = "admin")
+    if (decoded.role) {
+      req.userRole = String(decoded.role).toLowerCase();
+      return next();
+    }
+
+    // Si solo venía el id, buscamos el rol una sola vez aquí
+    try {
+      const user = await User.findByPk(req.userId, {
+        attributes: ["id", "is_active", "role_id"],
+        include: [{ model: Role, attributes: ["name"] }],
+      });
+
+      if (!user) {
+        return res.status(404).send({ message: "Usuario no encontrado." });
+      }
+
+      if (!user.is_active) {
+        return res.status(403).send({ message: "Cuenta desactivada." });
+      }
+
+      req.userRole = (user.role?.name || user.Role?.name || "customer").toLowerCase();
+      next();
+    } catch (dbErr) {
+      return res.status(500).send({ message: dbErr.message });
+    }
   });
 };
 
 /**
+ * 2. checkRole: Valida si req.userRole coincide con alguno de los roles permitidos
  * Uso: checkRole(["admin"]) o checkRole(["admin", "employee"])
- * Debe usarse SIEMPRE después de verifyToken (necesita req.userId).
  */
-const checkRole = (allowedRoleNames) => {
-  return async (req, res, next) => {
-    try {
-      const user = await User.findByPk(req.userId, { include: Role });
-      if (!user || !user.role) {
-        return res.status(403).send({ message: "No se pudo verificar el rol del usuario." });
-      }
-      if (!allowedRoleNames.includes(user.role.name)) {
-        return res.status(403).send({ message: "No tienes permisos para esta acción." });
-      }
-      next();
-    } catch (err) {
-      next(err);
+const checkRole = (allowedRoleNames = []) => {
+  const allowed = (Array.isArray(allowedRoleNames) ? allowedRoleNames : [allowedRoleNames])
+    .map(r => String(r).toLowerCase());
+
+  return (req, res, next) => {
+    if (!req.userRole) {
+      return res.status(403).send({ message: "No se pudo verificar el rol del usuario." });
     }
+
+    if (!allowed.includes(req.userRole)) {
+      return res.status(403).send({ message: "No tienes permisos para esta acción." });
+    }
+
+    next();
   };
 };
+
 /**
- * isOwnerOrAdmin: Permite la acción si el usuario autenticado es ADMIN,
- * o si el registro en 'customers' le pertenece (customer.user_id === req.userId).
+ * 3. isOwnerOrAdmin: Permite si es Admin o si el recurso pertenece al cliente autenticado
  */
 const isOwnerOrAdmin = async (req, res, next) => {
   try {
-    // Si ya viene como admin o employee con permisos globales:
+    // Si es Administrador, tiene acceso irrestricto
     if (req.userRole === "admin") {
       return next();
     }
@@ -62,22 +94,21 @@ const isOwnerOrAdmin = async (req, res, next) => {
       return res.status(400).send({ message: "ID de cliente no proporcionado." });
     }
 
-    const customer = await db.customer.findByPk(customerId, {
-      attributes: ["id", "user_id"]
+    const customer = await Customer.findByPk(customerId, {
+      attributes: ["id", "user_id"],
     });
 
     if (!customer) {
       return res.status(404).send({ message: "Cliente no encontrado." });
     }
 
-    // Comprobamos si el customer pertenece a la cuenta del token
-    if (customer.user_id !== req.userId) {
+    // Comprobamos si el customer pertenece a la cuenta autenticada (req.userId)
+    if (Number(customer.user_id) !== Number(req.userId)) {
       return res.status(403).send({
-        message: "Acceso denegado: No tienes permiso para modificar o ver esta cuenta."
+        message: "Acceso denegado: No tienes permiso para ver o modificar este perfil.",
       });
     }
 
-    // Adjuntamos el customer a la request por si el controlador lo necesita
     req.customer = customer;
     next();
   } catch (err) {
@@ -85,5 +116,8 @@ const isOwnerOrAdmin = async (req, res, next) => {
   }
 };
 
-module.exports = {verifyToken ,checkRole ,isOwnerOrAdmin };
-
+module.exports = {
+  verifyToken,
+  checkRole,
+  isOwnerOrAdmin,
+};
