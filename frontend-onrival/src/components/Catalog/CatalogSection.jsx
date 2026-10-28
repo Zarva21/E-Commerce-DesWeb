@@ -14,13 +14,15 @@ const SECTION_LINKS = [
 
 function applyFilters(products, filters) {
   return products.filter((product) => {
-    if (filters.categoria && normalize(product.category) !== normalize(filters.categoria)) return false;
-    if (filters.marca && normalize(product.brand) !== normalize(filters.marca)) return false;
-
-    // Se removió el filtro de oferta para evitar que oculte productos
-    // si no existe la propiedad onSale en la base de datos
-
-    if (product.price < filters.priceMin || product.price > filters.priceMax) return false;
+    if (filters.categoria && normalize(product.category) !== normalize(filters.categoria)) {
+      return false;
+    }
+    if (filters.marca && normalize(product.brand) !== normalize(filters.marca)) {
+      return false;
+    }
+    if (product.price < filters.priceMin || product.price > filters.priceMax) {
+      return false;
+    }
     return true;
   });
 }
@@ -28,7 +30,6 @@ function applyFilters(products, filters) {
 // Convierte el filtro que viene de un destacado del carrusel en filtros del catálogo
 function filtersFromHero(filter) {
   if (!filter) return DEFAULT_FILTERS;
-  // Si viene con tipo "offers", no bloqueamos nada y dejamos los filtros base
   if (filter.kind === "offers") return { ...DEFAULT_FILTERS };
   if (filter.kind === "category") return { ...DEFAULT_FILTERS, categoria: filter.category };
   return DEFAULT_FILTERS;
@@ -49,7 +50,7 @@ export default function CatalogSection({ section, filter = null, onSelectSection
     setLoading(true);
     catalogService
       .getAll()
-      .then((data) => setAllProducts(data))
+      .then((data) => setAllProducts(data || []))
       .catch((err) => console.error("Error al obtener catálogo:", err))
       .finally(() => setLoading(false));
   }, []);
@@ -59,15 +60,34 @@ export default function CatalogSection({ section, filter = null, onSelectSection
     setFilters(filtersFromHero(filter));
   }, [filter]);
 
-  // Filtrar base según la sección activa ("hombre", "mujer", "accesorios" o todo)
+  // Filtrar base según la sección activa ("hombre", "mujer", "accesorios" o catálogo general)
   const baseProducts = isGeneralCatalog
     ? allProducts
     : allProducts.filter((p) => {
         const secNorm = normalize(section || "");
-        return (
-          normalize(p.gender || "").includes(secNorm) ||
-          normalize(p.category || "").includes(secNorm)
-        );
+        const genNorm = normalize(p.gender || "");
+        const catNorm = normalize(p.category || "");
+        const nameNorm = normalize(p.name || "");
+
+        // Si se selecciona la pestaña Accesorios
+        if (secNorm === "accesorios") {
+          return (
+            genNorm.includes("accesorio") ||
+            catNorm.includes("accesorio") ||
+            nameNorm.includes("accesorio") ||
+            catNorm.includes("mochila") ||
+            catNorm.includes("gorra") ||
+            catNorm.includes("guante") ||
+            catNorm.includes("bolso") ||
+            catNorm.includes("balon") ||
+            catNorm.includes("natacion") ||
+            nameNorm.includes("natacion") ||
+            nameNorm.includes("kickboard")
+          );
+        }
+
+        // Filtro para secciones Hombre o Mujer
+        return genNorm.includes(secNorm) || catNorm.includes(secNorm);
       });
 
   const products = applyFilters(baseProducts, filters);
@@ -94,7 +114,12 @@ export default function CatalogSection({ section, filter = null, onSelectSection
         {isGeneralCatalog && (
           <div className="catalog-section-links">
             {SECTION_LINKS.map((link) => (
-              <button key={link.id} type="button" className="catalog-section-link" onClick={() => onSelectSection(link.id)}>
+              <button
+                key={link.id}
+                type="button"
+                className="catalog-section-link"
+                onClick={() => onSelectSection(link.id)}
+              >
                 {link.label}
               </button>
             ))}
