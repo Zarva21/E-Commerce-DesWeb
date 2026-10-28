@@ -1,0 +1,32 @@
+name: Deploy Automático a AWS EC2
+
+on:
+  push:
+    branches:
+      - master   # Se activa al hacer merge o push a master
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Conectar a EC2 y desplegar cambios
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: ${{ secrets.EC2_PORT }}
+          script: |
+            # 1. Entrar a la carpeta del proyecto en la EC2
+            cd ~/E-Commerce-DesWeb
+
+            # 2. Asegurar que estamos en master y bajar los cambios limpios
+            git checkout master
+            git pull origin master
+
+            # 3. Reconstruir los contenedores afectados en segundo plano
+            docker compose up -d --build
+
+            # 4. Limpiar imágenes huérfanas viejas para no saturar el disco EBS
+            docker image prune -f
