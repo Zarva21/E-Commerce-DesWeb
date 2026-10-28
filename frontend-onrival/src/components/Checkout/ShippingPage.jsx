@@ -11,20 +11,25 @@ const formatPrice = (value) =>
     minimumFractionDigits: 2,
   }).format(value);
 
+const formatPhoneNumber = (value = "") => {
+  const digits = String(value).replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 4) return digits;
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+};
+
 export default function ShippingPage({ onBackToCart, onContinue }) {
   const { items, subtotal } = useCart();
   const [savedAddresses, setSavedAddresses] = useState([]);
-  const [selectedAddressId, setSelectedAddressId] = useState("new"); // "new" o ID numérico
+  const [selectedAddressId, setSelectedAddressId] = useState("new");
   const [isLogged, setIsLogged] = useState(false);
+  const [formError, setFormError] = useState("");
 
-  // Sección 1: Datos de Contacto
   const [contact, setContact] = useState({
     nombre: "",
     email: "",
     telefono: "",
   });
 
-  // Sección 2: Datos de Dirección (para nueva dirección o ghost user)
   const [addressForm, setAddressForm] = useState({
     direccion: "",
     direccion2: "",
@@ -43,10 +48,9 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
       setContact({
         nombre: fullName || storedUser.email.split("@")[0],
         email: storedUser.email,
-        telefono: storedUser.phone || "",
+        telefono: formatPhoneNumber(storedUser.phone || ""),
       });
 
-      // Cargar direcciones guardadas del cliente
       api.get("/users/customers/addresses/me")
         .then((res) => {
           if (res.data && res.data.length > 0) {
@@ -61,13 +65,25 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
         .catch((err) => {
           console.warn("No se pudieron cargar las direcciones guardadas:", err);
           setSavedAddresses([]);
-          setSelectedAddressId("new"); 
+          setSelectedAddressId("new");
         });
     }
   }, []);
 
+  const handlePhoneChange = (e) => {
+    setFormError("");
+    setContact((prev) => ({ ...prev, telefono: formatPhoneNumber(e.target.value) }));
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
+    setFormError("");
+
+    const phoneDigits = contact.telefono.replace(/\D/g, "");
+    if (phoneDigits.length !== 8) {
+      setFormError("Por favor ingresa un número de teléfono válido de 8 dígitos (ej. 5555-5555).");
+      return;
+    }
 
     let finalShippingData = {
       nombre: contact.nombre,
@@ -75,13 +91,11 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
       telefono: contact.telefono,
     };
 
-    // 1. Buscamos la dirección seleccionada si no es "new"
     const chosen = (isLogged && selectedAddressId !== "new")
       ? savedAddresses.find((a) => a.id === Number(selectedAddressId))
       : null;
 
     if (chosen) {
-      //El usuario eligió una dirección válida de la BD
       finalShippingData = {
         ...finalShippingData,
         address_id: chosen.id,
@@ -91,7 +105,6 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
         departamento: chosen.state || "Guatemala",
       };
     } else {
-      //Si eligió "new", o si la lista estaba vacía/falló la consulta
       finalShippingData = {
         ...finalShippingData,
         address_id: null,
@@ -120,7 +133,12 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
 
       <div className="shipping-layout">
         <form className="shipping-form" onSubmit={handleSubmit}>
-          
+          {formError && (
+            <p style={{ color: "#dc2626", background: "#fef2f2", padding: "0.6rem 0.8rem", borderRadius: "6px", fontSize: "0.85rem", marginBottom: "1rem" }}>
+              {formError}
+            </p>
+          )}
+
           {/* SECCIÓN 1: CONTACTO */}
           <div className="form-section">
             <h3 style={{ marginBottom: "1rem", fontSize: "1.1rem" }}>1. Información de Contacto</h3>
@@ -139,7 +157,7 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
                 <input
                   type="email"
                   value={contact.email}
-                  disabled={isLogged} // Si está logueado, su correo no cambia
+                  disabled={isLogged}
                   onChange={(e) => setContact({ ...contact, email: e.target.value })}
                   required
                 />
@@ -149,8 +167,10 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
                 <input
                   type="tel"
                   value={contact.telefono}
-                  onChange={(e) => setContact({ ...contact, telefono: e.target.value })}
-                  placeholder="0000-0000"
+                  onChange={handlePhoneChange}
+                  placeholder="5555-5555"
+                  maxLength={9}
+                  inputMode="numeric"
                   required
                 />
               </label>
@@ -163,7 +183,6 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
           <div className="form-section">
             <h3 style={{ marginBottom: "1rem", fontSize: "1.1rem" }}>2. Dirección de Entrega</h3>
 
-            {/* Selector de direcciones si tiene guardadas */}
             {isLogged && savedAddresses.length > 0 && (
               <div style={{ marginBottom: "1.2rem" }}>
                 <label className="shipping-field">
@@ -184,7 +203,6 @@ export default function ShippingPage({ onBackToCart, onContinue }) {
               </div>
             )}
 
-            {/* Formulario de dirección manual: Visible si es Ghost O si eligió "new" */}
             {(!isLogged || selectedAddressId === "new") && (
               <>
                 <label className="shipping-field">

@@ -1,6 +1,5 @@
-// Qué puede ver y hacer cada rol dentro del panel.
-// Si llega un rol desconocido se usa el de menos permisos (empleado).
-// "reportes" y las ventas del panel general (canSeeSalesStats) son solo para admin.
+// src/admin/permissions.js
+
 export const PERMISSIONS = {
   admin: {
     label: "Admin",
@@ -8,11 +7,12 @@ export const PERMISSIONS = {
     canCreateProduct: true,
     canToggleProduct: true,
     canDeleteProduct: true,
-    canManageCatalogEntities: true, // crear/editar/eliminar marcas, categorías y proveedores
+    canManageCatalogEntities: true,
     canAddInventoryProduct: true,
     canSeeEmployees: true,
     canDeleteUsers: true,
     canSeeSalesStats: true,
+    canChangeUserRole: true,
   },
   empleado: {
     label: "Empleado",
@@ -25,6 +25,7 @@ export const PERMISSIONS = {
     canSeeEmployees: false,
     canDeleteUsers: false,
     canSeeSalesStats: false,
+    canChangeUserRole: false, 
   },
 };
 

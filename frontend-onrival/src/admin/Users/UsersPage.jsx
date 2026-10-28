@@ -44,7 +44,27 @@ const nextEmployeeCode = (employees) => {
   return `EMP-${String(max + 1).padStart(3, "0")}`;
 };
 
-export default function UsersPage({ canSeeEmployees = true, canDelete = true }) {
+const TrashIcon = () => (
+  <svg
+    width="15"
+    height="15"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <polyline points="3 6 5 6 21 6" />
+    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+  </svg>
+);
+
+export default function UsersPage({
+  canSeeEmployees = true,
+  canDelete = true,
+  canChangeUserRole = false,
+}) {
   const [activeTab, setActiveTab] = useState(canSeeEmployees ? "employees" : "clients");
   const tab = canSeeEmployees ? activeTab : "clients";
 
@@ -313,6 +333,7 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
 
   // ---------------- CAMBIO DE ROL ----------------
   const openRoleModal = (user) => {
+    if (!canChangeUserRole) return;
     setRoleModalUser(user);
     setSelectedRoleId(user.role_id || "");
   };
@@ -333,13 +354,7 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
       setSubmittingRole(false);
     }
   };
-  
-  const TrashIcon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-    <polyline points="3 6 5 6 21 6" />
-    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-  </svg>
-);
+
   return (
     <div className="users-page">
       <PageHeader
@@ -406,11 +421,11 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
                         <td>
                           <span
                             className="user-role-badge"
-                            style={{ cursor: "pointer" }}
-                            onClick={() => openRoleModal(employee)}
-                            title="Haz clic para cambiar el rol"
+                            style={{ cursor: canChangeUserRole ? "pointer" : "default" }}
+                            onClick={() => canChangeUserRole && openRoleModal(employee)}
+                            title={canChangeUserRole ? "Haz clic para cambiar el rol" : undefined}
                           >
-                            {employee.role_name || employee.position || "Colaborador"} ✎
+                            {employee.role_name || employee.position || "Colaborador"} {canChangeUserRole && ""}
                           </span>
                         </td>
                         <td>
@@ -510,9 +525,16 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
                             <button type="button" className="data-action-btn" onClick={() => setDetailId(client.id)}>
                               Detalle
                             </button>
-                            <button type="button" className="data-action-btn" onClick={() => openRoleModal(client)} title="Cambiar rol">
-                              Rol
-                            </button>
+                            {canChangeUserRole && (
+                              <button
+                                type="button"
+                                className="data-action-btn"
+                                onClick={() => openRoleModal(client)}
+                                title="Cambiar rol"
+                              >
+                                Rol
+                              </button>
+                            )}
                             <button type="button" className="data-action-btn" onClick={() => openModal("client", client)}>
                               Editar
                             </button>
@@ -550,8 +572,8 @@ export default function UsersPage({ canSeeEmployees = true, canDelete = true }) 
         </>
       )}
 
-      {/* MODAL: CAMBIAR ROL */}
-      {roleModalUser && (
+      {/* MODAL: CAMBIAR ROL (Solo para quien tiene canChangeUserRole habilitado) */}
+      {canChangeUserRole && roleModalUser && (
         <div className="catalog-modal-overlay" onClick={() => setRoleModalUser(null)}>
           <div className="catalog-modal-card" style={{ maxWidth: "400px" }} onClick={(e) => e.stopPropagation()}>
             <div className="catalog-modal-header">

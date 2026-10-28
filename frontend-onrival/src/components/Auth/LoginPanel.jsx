@@ -12,8 +12,13 @@ const EMPTY_FORM = {
   confirmarPassword: "",
 };
 
+const formatPhoneNumber = (value = "") => {
+  const digits = String(value).replace(/\D/g, "").slice(0, 8);
+  if (digits.length <= 4) return digits;
+  return `${digits.slice(0, 4)}-${digits.slice(4)}`;
+};
+
 export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }) {
-  // Pestañas posibles: "login" | "register" | "forgot" | "2fa" | "convert"
   const [tab, setTab] = useState(initialTab ?? "login");
   const [form, setForm] = useState(EMPTY_FORM);
   const [twoFactorCode, setTwoFactorCode] = useState("");
@@ -39,12 +44,29 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
     setSuccessMsg("");
   };
 
+  const handlePhoneChange = (e) => {
+    const formatted = formatPhoneNumber(e.target.value);
+    setForm((f) => ({ ...f, telefono: formatted }));
+    setError("");
+    setSuccessMsg("");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     setSuccessMsg("");
 
-    // Validaciones de contraseñas para registro y activación de invitado
+    const rawPhoneDigits = form.telefono.replace(/\D/g, "");
+    if (tab === "register" && rawPhoneDigits.length !== 8) {
+      setError("Ingresa un número de teléfono válido de 8 dígitos (ej. 5555-5555).");
+      return;
+    }
+
+    if (tab === "convert" && form.telefono && rawPhoneDigits.length !== 8) {
+      setError("El número de teléfono debe tener 8 dígitos (ej. 5555-5555).");
+      return;
+    }
+
     if ((tab === "register" || tab === "convert") && form.password !== form.confirmarPassword) {
       setError("Las contraseñas no coinciden.");
       return;
@@ -59,10 +81,8 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
 
     try {
       if (tab === "login") {
-        // Paso 1: Autenticación por credenciales
         const res = await authService.login(form.email, form.password);
 
-        // Si el usuario requiere confirmación OTP por correo
         if (res.requires2FA) {
           setPendingUserId(res.userId);
           setTab("2fa");
@@ -73,7 +93,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
           onLoginSuccess?.(role);
         }
       } else if (tab === "2fa") {
-        // Paso 2: Validación del token OTP de 6 dígitos
         const data = await authService.verify2FA(pendingUserId, twoFactorCode);
         const role = data.user?.role || "cliente";
 
@@ -82,7 +101,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
         setPendingUserId(null);
         onLoginSuccess?.(role);
       } else if (tab === "register") {
-        // Registro estándar de nuevo cliente
         await authService.register(form);
         const res = await authService.login(form.email, form.password);
 
@@ -96,7 +114,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
           onLoginSuccess?.(role);
         }
       } else if (tab === "convert") {
-        // Activa la cuenta de un comprador invitado vinculando contraseña y teléfono
         const data = await authService.convertGuest(form.email, form.password, form.telefono);
         const role = data.user?.role || "cliente";
         setSuccessMsg("¡Cuenta activada con éxito! Tus compras previas han sido vinculadas.");
@@ -105,7 +122,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
           onLoginSuccess?.(role);
         }, 1200);
       } else if (tab === "forgot") {
-        // Envío de enlace para reestablecer credenciales
         const res = await authService.forgotPassword(form.email);
         setSuccessMsg(res.message || "Hemos enviado las instrucciones a tu correo electrónico.");
       }
@@ -115,7 +131,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
         err.response?.data?.message ||
         "Error al comunicarse con el servidor. Revisa tus credenciales.";
 
-      // Si el email ya está asociado a una compra de invitado previa
       if (
         serverMessage.toLowerCase().includes("invitado") ||
         serverMessage.toLowerCase().includes("guest")
@@ -166,7 +181,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
           </h2>
         </div>
 
-        {/* Pestañas clásicas Login / Registro */}
         {(tab === "login" || tab === "register") && (
           <div className="tabs">
             <button
@@ -187,7 +201,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
         )}
 
         <form className="form" onSubmit={handleSubmit}>
-          {/* CAMPOS EXCLUSIVOS DE REGISTRO NUEVO */}
           {tab === "register" && (
             <div className="field-row">
               <label className="field">
@@ -215,14 +228,12 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
             </div>
           )}
 
-          {/* MENSAJE EXPLICATIVO PARA INVITADOS */}
           {tab === "convert" && (
             <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 1rem 0", lineHeight: "1.4" }}>
               Ingresa el correo con el que realizaste tu compra como invitado y establece una contraseña para ver tus pedidos.
             </p>
           )}
 
-          {/* CAMPO DE CORREO ELECTRÓNICO */}
           {(tab === "login" || tab === "register" || tab === "forgot" || tab === "convert") && (
             <label className="field">
               <span>Correo electrónico</span>
@@ -237,7 +248,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
             </label>
           )}
 
-          {/* CAMPO DE TELÉFONO: VISIBLE EN REGISTRO Y EN CONVERSIÓN DE INVITADO */}
           {(tab === "register" || tab === "convert") && (
             <label className="field">
               <span>
@@ -246,15 +256,16 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
               <input
                 name="telefono"
                 value={form.telefono}
-                onChange={handleChange}
+                onChange={handlePhoneChange}
                 placeholder="5555-5555"
                 type="tel"
+                maxLength={9}
+                inputMode="numeric"
                 required={tab === "register"}
               />
             </label>
           )}
 
-          {/* CAMPOS DE CONTRASEÑA */}
           {(tab === "login" || tab === "register" || tab === "convert") && (
             <label className="field">
               <span>{tab === "convert" ? "Nueva contraseña" : "Contraseña"}</span>
@@ -269,7 +280,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
             </label>
           )}
 
-          {/* CONFIRMACIÓN DE CONTRASEÑA */}
           {(tab === "register" || tab === "convert") && (
             <label className="field">
               <span>Confirmar contraseña</span>
@@ -284,24 +294,23 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
             </label>
           )}
 
-          {/* CAMPO DE CÓDIGO OTP / 2FA */}
           {tab === "2fa" && (
             <label className="field">
               <span>Código de 6 dígitos</span>
               <input
                 name="twoFactorCode"
                 value={twoFactorCode}
-                onChange={(e) => setTwoFactorCode(e.target.value)}
+                onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 placeholder="123456"
                 type="text"
                 maxLength={6}
+                inputMode="numeric"
                 style={{ textAlign: "center", fontSize: "22px", letterSpacing: "5px" }}
                 required
               />
             </label>
           )}
 
-          {/* MENSAJES DE ESTADO */}
           {error && <p className="form-error">{error}</p>}
           {successMsg && (
             <p className="form-success" style={{ color: "#16a34a", fontSize: "13px", margin: "8px 0" }}>
@@ -309,7 +318,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
             </p>
           )}
 
-          {/* ENLACES RÁPIDOS EN PESTAÑA LOGIN */}
           {tab === "login" && (
             <div style={{ display: "flex", justifyContent: "space-between", margin: "6px 0" }}>
               <button
@@ -330,7 +338,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
             </div>
           )}
 
-          {/* RETORNO AL FORMULARIO DE LOGIN */}
           {(tab === "forgot" || tab === "2fa" || tab === "convert") && (
             <button
               type="button"
@@ -357,7 +364,6 @@ export default function LoginPanel({ open, initialTab, onClose, onLoginSuccess }
           </button>
         </form>
 
-        {/* INTEGRACIÓN DE BOTÓN GOOGLE EN LOGIN Y REGISTRO */}
         {(tab === "login" || tab === "register") && (
           <>
             <div style={{ display: "flex", alignItems: "center", margin: "20px 0 16px 0", gap: 10 }}>
