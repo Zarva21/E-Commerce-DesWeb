@@ -27,8 +27,8 @@ export function adaptProduct(item) {
       id: v.id,
       sku: v.sku,
       size: v.size,
-      color: v.color || null,                    
-      weight: v.weight ? Number(v.weight) : null, 
+      color: v.color || null,
+      weight: v.weight ? Number(v.weight) : null,
       barcode: v.barcode || null,
       stock: {
         quantity: stockQty,
@@ -39,11 +39,27 @@ export function adaptProduct(item) {
 
   const totalStock = normalizedVariants.reduce((acc, v) => acc + v.stock.quantity_on_hand, 0);
 
+  // Deducir género y tipo según la categoría o el nombre
   let gender = "Unisex";
-  const catName = (item.category?.name || "").toLowerCase();
+  const catName = (item.category?.name || (typeof item.category === "string" ? item.category : "")).toLowerCase();
   const prodName = (item.name || "").toLowerCase();
-  if (catName.includes("hombre") || prodName.includes("hombre")) gender = "Hombre";
-  if (catName.includes("mujer") || prodName.includes("mujer")) gender = "Mujer";
+
+  if (
+    catName.includes("accesorio") ||
+    prodName.includes("accesorio") ||
+    catName.includes("natacion") ||
+    prodName.includes("kickboard") ||
+    catName.includes("mochila") ||
+    catName.includes("gorra") ||
+    catName.includes("guante") ||
+    catName.includes("balon")
+  ) {
+    gender = "Accesorios";
+  } else if (catName.includes("hombre") || prodName.includes("hombre")) {
+    gender = "Hombre";
+  } else if (catName.includes("mujer") || prodName.includes("mujer")) {
+    gender = "Mujer";
+  }
 
   // Extraer todas las URLs de las fotos del producto
   const galleryUrls = rawImages
@@ -62,7 +78,7 @@ export function adaptProduct(item) {
     gender,
     sport: item.category?.name || "Deporte",
     image: primaryImg,
-    images: galleryUrls.length > 0 ? galleryUrls : [primaryImg], 
+    images: galleryUrls.length > 0 ? galleryUrls : [primaryImg],
     stock: totalStock,
     variants: normalizedVariants,
   };
