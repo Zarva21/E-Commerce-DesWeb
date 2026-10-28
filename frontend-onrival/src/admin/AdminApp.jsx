@@ -61,10 +61,12 @@ export default function AdminApp({ role = "employee", onExitAdmin }) {
         />
       )}
 
+      {/* ÚNICA INSTANCIA DE USUARIOS / EMPLEADOS */}
       {currentView === "usuarios" && (
         <EmployeesPage
           canSeeEmployees={permissions.canSeeEmployees}
           canDelete={permissions.canDeleteUsers}
+          canChangeUserRole={permissions.canChangeUserRole}
         />
       )}
 

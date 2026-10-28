@@ -75,9 +75,13 @@ export default function InventoryPage() {
   const [batchModalOpen, setBatchModalOpen] = useState(false);
   const [batchReference, setBatchReference] = useState("");
   const [batchNotes, setBatchNotes] = useState("");
-  const [batchItems, setBatchItems] = useState([]); // [{ variantId, sku, name, qty }]
+  const [batchItems, setBatchItems] = useState([]);
   const [variantSearchText, setVariantSearchText] = useState("");
   const [batchProgress, setBatchProgress] = useState(null);
+
+  // Estados: buscador en seleccionados y cantidad masiva
+  const [selectedSearchText, setSelectedSearchText] = useState("");
+  const [bulkQty, setBulkQty] = useState("");
 
   const loadData = async () => {
     setLoading(true);
@@ -115,7 +119,7 @@ export default function InventoryPage() {
     return Array.from(brands).sort();
   }, [inventory]);
 
-  // Filtrado principal de la tabla de stock
+  // Filtrado de stock
   const filteredInventory = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return inventory
@@ -156,7 +160,19 @@ export default function InventoryPage() {
       });
   }, [inventory, searchQuery, filterBrand, filterStockStatus, sortBy]);
 
-  // Filtrado del buscador interno de variantes en el modal con Checkbox
+  // Filtrado de Movimientos (AQUÍ ESTÁ LA FUNCIÓN QUE FALTABA)
+  const filteredMovements = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return movements;
+    return movements.filter((mov) => {
+      const sku = (mov.sku || skuByVariant.get(String(mov.product_variant_id)) || "").toLowerCase();
+      const ref = String(mov.reference || "").toLowerCase();
+      const type = String(mov.movement_type || "").toLowerCase();
+      return sku.includes(q) || ref.includes(q) || type.includes(q);
+    });
+  }, [movements, searchQuery, skuByVariant]);
+
+  // Filtrado de variantes a marcar en el modal
   const searchedVariantsForBatch = useMemo(() => {
     const term = variantSearchText.trim().toLowerCase();
     if (!term) return inventory;
@@ -167,7 +183,17 @@ export default function InventoryPage() {
     });
   }, [inventory, variantSearchText]);
 
-  // Manejador del toggle de Checkbox
+  // Filtrado dentro de los ya seleccionados en la factura
+  const filteredBatchItems = useMemo(() => {
+    const term = selectedSearchText.trim().toLowerCase();
+    if (!term) return batchItems;
+    return batchItems.filter((i) => {
+      const name = String(i.name || "").toLowerCase();
+      const sku = String(i.sku || "").toLowerCase();
+      return name.includes(term) || sku.includes(term);
+    });
+  }, [batchItems, selectedSearchText]);
+
   const handleToggleVariantInBatch = (variant) => {
     const exists = batchItems.some((item) => item.variantId === variant.product_variant_id);
     if (exists) {
@@ -194,11 +220,22 @@ export default function InventoryPage() {
     );
   };
 
+  const handleApplyBulkQty = () => {
+    const parsed = parseInt(bulkQty, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+      alert("Ingresa una cantidad válida mayor a 0.");
+      return;
+    }
+    setBatchItems((prev) => prev.map((item) => ({ ...item, qty: parsed })));
+  };
+
   const handleOpenBatchModal = () => {
     setBatchReference("");
     setBatchNotes("");
     setBatchItems([]);
     setVariantSearchText("");
+    setSelectedSearchText("");
+    setBulkQty("");
     setErrorMsg("");
     setBatchProgress(null);
     setBatchModalOpen(true);
@@ -209,7 +246,7 @@ export default function InventoryPage() {
     setErrorMsg("");
 
     if (batchItems.length === 0) {
-      setErrorMsg("Debes seleccionar al menos una variante con su casilla.");
+      setErrorMsg("Debes seleccionar al menos una variante.");
       return;
     }
 
@@ -281,9 +318,7 @@ export default function InventoryPage() {
       await loadData();
       setSelectedVariant(null);
     } catch (err) {
-      setErrorMsg(
-        err.response?.data?.message || err.message || "Error al registrar movimiento."
-      );
+      setErrorMsg(err.response?.data?.message || err.message || "Error al registrar movimiento.");
     } finally {
       setSubmitting(false);
     }
@@ -291,7 +326,6 @@ export default function InventoryPage() {
 
   return (
     <div className="inventory-page">
-      {/* Cabecera balanceada para que el botón no quede descuadrado ni sobresalga */}
       <div
         style={{
           display: "flex",
@@ -348,7 +382,7 @@ export default function InventoryPage() {
       </div>
 
       <div className="data-card">
-        {/* Barra con Búsqueda y Filtros */}
+        {/* Barra de Filtros */}
         <div
           style={{
             display: "flex",
@@ -364,7 +398,7 @@ export default function InventoryPage() {
             placeholder={
               activeTab === "stock"
                 ? "Buscar por nombre, SKU, marca o categoría..."
-                : "Buscar por SKU, referencia o tipo..."
+                : "Buscar por SKU, referencia o tipo de movimiento..."
             }
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -415,75 +449,130 @@ export default function InventoryPage() {
           <p className="data-empty">Cargando datos de almacén...</p>
         ) : (
           <>
+            {/* PESTAÑA 1: STOCK */}
             {activeTab === "stock" && (
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Producto / SKU</th>
-                    <th>Marca / Cat.</th>
-                    <th>Precio</th>
-                    <th>Stock Actual</th>
-                    <th>Nivel Reorden</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredInventory.map((item) => {
-                    const { category, gender } = categoryInfo(item);
-                    const brand = BRAND_NAME.get(String(item.brand_id)) || item.brand || "Sin marca";
-                    const variantLabel = [item.size && `Talla ${item.size}`, item.color]
-                      .filter(Boolean)
-                      .join(" · ");
+              <>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Producto / SKU</th>
+                      <th>Marca / Cat.</th>
+                      <th>Precio</th>
+                      <th>Stock Actual</th>
+                      <th>Nivel Reorden</th>
+                      <th>Estado</th>
+                      <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredInventory.map((item) => {
+                      const { category, gender } = categoryInfo(item);
+                      const brand = BRAND_NAME.get(String(item.brand_id)) || item.brand || "Sin marca";
+                      const variantLabel = [item.size && `Talla ${item.size}`, item.color]
+                        .filter(Boolean)
+                        .join(" · ");
 
-                    return (
-                      <tr key={item.product_variant_id}>
-                        <td>
-                          <div className="data-cell-main">
-                            <div className="data-cell-thumb">
-                              <img src={item.image || PLACEHOLDER_IMAGE} alt={item.name} />
-                            </div>
-                            <div>
-                              <span className="data-cell-title">{item.name}</span>
-                              <div className="data-cell-muted">
-                                SKU: <strong>{item.sku}</strong>
-                                {variantLabel ? ` · ${variantLabel}` : ""}
+                      return (
+                        <tr key={item.product_variant_id}>
+                          <td>
+                            <div className="data-cell-main">
+                              <div className="data-cell-thumb">
+                                <img src={item.image || PLACEHOLDER_IMAGE} alt={item.name} />
+                              </div>
+                              <div>
+                                <span className="data-cell-title">{item.name}</span>
+                                <div className="data-cell-muted">
+                                  SKU: <strong>{item.sku}</strong>
+                                  {variantLabel ? ` · ${variantLabel}` : ""}
+                                </div>
                               </div>
                             </div>
-                          </div>
+                          </td>
+                          <td>
+                            <div>{brand}</div>
+                            <span className="data-cell-muted">
+                              {category} {gender ? `(${gender})` : ""}
+                            </span>
+                          </td>
+                          <td>{formatPrice(item.price)}</td>
+                          <td>
+                            <strong className="stock-qty">{item.quantity_on_hand}</strong> unid.
+                          </td>
+                          <td>{item.reorder_level} unid.</td>
+                          <td>{stockBadge(item.quantity_on_hand, item.reorder_level)}</td>
+                          <td>
+                            <button
+                              type="button"
+                              className="data-action-btn"
+                              onClick={() => handleOpenAdjustModal(item)}
+                            >
+                              Ajustar Stock
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {filteredInventory.length === 0 && (
+                  <p className="data-empty">No se encontraron productos que coincidan con los filtros.</p>
+                )}
+              </>
+            )}
+
+            {/* PESTAÑA 2: HISTORIAL DE MOVIMIENTOS RESTAURADA */}
+            {activeTab === "movements" && (
+              <>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Variante (SKU)</th>
+                      <th>Tipo Movimiento</th>
+                      <th>Cantidad</th>
+                      <th>Referencia</th>
+                      <th>Notas</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredMovements.map((mov) => (
+                      <tr key={mov.id}>
+                        <td className="data-cell-muted">{formatDate(mov.created_at || mov.createdAt)}</td>
+                        <td>
+                          <strong>
+                            {mov.sku ??
+                              skuByVariant.get(String(mov.product_variant_id)) ??
+                              `#${mov.product_variant_id}`}
+                          </strong>
                         </td>
                         <td>
-                          <div>{brand}</div>
-                          <span className="data-cell-muted">
-                            {category} {gender ? `(${gender})` : ""}
+                          <span className={`movement-tag tag-${String(mov.movement_type).toLowerCase()}`}>
+                            {mov.movement_type}
                           </span>
                         </td>
-                        <td>{formatPrice(item.price)}</td>
                         <td>
-                          <strong className="stock-qty">{item.quantity_on_hand}</strong> unid.
+                          <strong className={Number(mov.quantity) > 0 ? "qty-plus" : "qty-minus"}>
+                            {Number(mov.quantity) > 0 ? `+${mov.quantity}` : mov.quantity}
+                          </strong>
                         </td>
-                        <td>{item.reorder_level} unid.</td>
-                        <td>{stockBadge(item.quantity_on_hand, item.reorder_level)}</td>
-                        <td>
-                          <button
-                            type="button"
-                            className="data-action-btn"
-                            onClick={() => handleOpenAdjustModal(item)}
-                          >
-                            Ajustar Stock
-                          </button>
-                        </td>
+                        <td>{mov.reference || "-"}</td>
+                        <td className="data-cell-muted">{mov.notes || "-"}</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>
+
+                {filteredMovements.length === 0 && (
+                  <p className="data-empty">No se encontraron movimientos registrados con ese criterio.</p>
+                )}
+              </>
             )}
           </>
         )}
       </div>
 
-      {/* MODAL: AJUSTE INDIVIDUAL */}
+      {/* MODAL 1: AJUSTE INDIVIDUAL */}
       {selectedVariant && (
         <div className="inventory-modal-overlay" onClick={() => setSelectedVariant(null)}>
           <div className="inventory-modal-card" onClick={(e) => e.stopPropagation()}>
@@ -554,12 +643,12 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* MODAL: INGRESO POR FACTURA (CON BUSCADOR + CHECKBOXES) */}
+      {/* MODAL 2: INGRESO POR FACTURA (CON CHECKBOXES + APLICAR A TODOS + BUSCADOR INTERNO) */}
       {batchModalOpen && (
         <div className="inventory-modal-overlay" onClick={() => !submitting && setBatchModalOpen(false)}>
           <div
             className="inventory-modal-card"
-            style={{ maxWidth: "760px", width: "95%" }}
+            style={{ maxWidth: "780px", width: "95%" }}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="inventory-modal-header">
@@ -605,7 +694,7 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-              {/* SECCIÓN BUSCADOR CON CHECKBOXES */}
+              {/* SECCIÓN 1: BUSCADOR CON CHECKBOXES */}
               <div style={{ marginTop: "1rem", borderTop: "1px solid #e2e8f0", paddingTop: "1rem" }}>
                 <label style={{ fontWeight: 600, display: "block", marginBottom: "0.5rem" }}>
                   1. Buscar y marcar las variantes recibidas en la factura:
@@ -624,10 +713,9 @@ export default function InventoryPage() {
                   }}
                 />
 
-                {/* Lista filtrable de checkboxes */}
                 <div
                   style={{
-                    maxHeight: "150px",
+                    maxHeight: "140px",
                     overflowY: "auto",
                     border: "1px solid #cbd5e1",
                     borderRadius: "6px",
@@ -674,23 +762,88 @@ export default function InventoryPage() {
                 </div>
               </div>
 
-              {/* SECCIÓN TABLA: CANTIDADES DE LAS VARIANTES MARCADAS */}
-              <div style={{ marginTop: "1rem" }}>
-                <label style={{ fontWeight: 600, display: "block", marginBottom: "0.5rem" }}>
-                  2. Ingresar cantidades a recibir ({batchItems.length} seleccionadas):
-                </label>
+              {/* SECCIÓN 2: VARIANTES SELECCIONADAS, BUSCADOR Y CANTIDAD MASIVA */}
+              <div style={{ marginTop: "1.2rem", borderTop: "1px solid #e2e8f0", paddingTop: "1rem" }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: "0.5rem",
+                    marginBottom: "0.6rem",
+                  }}
+                >
+                  <label style={{ fontWeight: 600 }}>
+                    2. Variantes Seleccionadas ({batchItems.length}):
+                  </label>
+
+                  {batchItems.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                      <span style={{ fontSize: "0.82rem", color: "#475569" }}>Misma cant.:</span>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Ej: 10"
+                        value={bulkQty}
+                        onChange={(e) => setBulkQty(e.target.value)}
+                        style={{
+                          width: "75px",
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          border: "1px solid #cbd5e1",
+                          fontSize: "0.85rem",
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={handleApplyBulkQty}
+                        style={{
+                          backgroundColor: "#3b82f6",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "4px",
+                          padding: "5px 10px",
+                          fontSize: "0.8rem",
+                          cursor: "pointer",
+                          fontWeight: 600,
+                        }}
+                      >
+                        Aplicar a todos
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {batchItems.length > 0 && (
+                  <input
+                    type="text"
+                    placeholder="Filtrar dentro de los productos ya seleccionados..."
+                    value={selectedSearchText}
+                    onChange={(e) => setSelectedSearchText(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "0.45rem 0.75rem",
+                      borderRadius: "6px",
+                      border: "1px solid #cbd5e1",
+                      marginBottom: "0.6rem",
+                      fontSize: "0.85rem",
+                      backgroundColor: "#fafafa",
+                    }}
+                  />
+                )}
 
                 <div style={{ maxHeight: "200px", overflowY: "auto", border: "1px solid #e2e8f0", borderRadius: "6px" }}>
                   <table className="data-table" style={{ margin: 0 }}>
                     <thead>
                       <tr>
                         <th>SKU / Nombre</th>
-                        <th style={{ width: "130px" }}>Cantidad Entrante</th>
+                        <th style={{ width: "140px" }}>Cantidad Entrante</th>
                         <th style={{ width: "50px", textAlign: "center" }}>Quitar</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {batchItems.map((item) => (
+                      {filteredBatchItems.map((item) => (
                         <tr key={item.variantId}>
                           <td>
                             <strong>{item.sku}</strong>
@@ -731,7 +884,14 @@ export default function InventoryPage() {
                       {batchItems.length === 0 && (
                         <tr>
                           <td colSpan="3" style={{ textAlign: "center", color: "#94a3b8", padding: "1.2rem" }}>
-                            Marca las casillas arriba para agregar variantes a esta factura.
+                            Marca las casillas del paso 1 para agregar variantes a esta factura.
+                          </td>
+                        </tr>
+                      )}
+                      {batchItems.length > 0 && filteredBatchItems.length === 0 && (
+                        <tr>
+                          <td colSpan="3" style={{ textAlign: "center", color: "#94a3b8", padding: "1.2rem" }}>
+                            No hay productos seleccionados que coincidan con la búsqueda.
                           </td>
                         </tr>
                       )}
