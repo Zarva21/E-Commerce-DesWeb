@@ -105,14 +105,15 @@ exports.getAll = async (filters = {}, { isAdmin = false } = {}) => {
     min_price,
     max_price,
     page = 1,
-    limit = 12,
+    limit,     
+    all,      
     sort = "newest"
   } = filters;
 
   const where = {};
 
   // Regla de negocio: el cliente SOLO ve productos activos.
-  if (!isAdmin) where.is_active = true;
+  if (!isAdmin) where.is_active  = true;
 
   if (q) {
     where[Op.or] = [
@@ -158,9 +159,20 @@ exports.getAll = async (filters = {}, { isAdmin = false } = {}) => {
     newest: [["created_at", "DESC"]]
   };
 
-  const pageNumber = Math.max(parseInt(page, 10) || 1, 1);
-  const pageSize = Math.min(Math.max(parseInt(limit, 10) || 12, 1), 100);
+  
   const order = orderMap[sort] || orderMap.newest;
+
+const shouldFetchAll = all === true || all === "true" || limit === "all" || limit === undefined || limit === null;
+
+  let pageNumber = 1;
+  let pageSize = undefined;
+  let offset = undefined;
+
+  if (!shouldFetchAll) {
+    pageNumber = Math.max(parseInt(page, 10) || 1, 1);
+    pageSize = Math.max(parseInt(limit, 10) || 12, 1);
+    offset = (pageNumber - 1) * pageSize;
+  }
 
   // La consulta va en DOS PASOS a propósito.
   //
@@ -185,7 +197,7 @@ exports.getAll = async (filters = {}, { isAdmin = false } = {}) => {
     group: ["products.id"], // OJO: Algunos dialectos prefieren 'product.id' en singular, si falla, usa el de tu modelo exacto
     order,
     limit: pageSize,
-    offset: (pageNumber - 1) * pageSize,
+    offset: offset,
     subQuery: false,
     raw: true
   });
