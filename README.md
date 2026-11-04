@@ -4,10 +4,10 @@
 
 Rapidly deploy a robust, scalable e-commerce platform with a modern, containerized microservices architecture.
 
-[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen)](https://github.com/YOUR_USERNAME/E-Commerce-DesWeb/actions)
+[![Build Status](https://img.shields.io/badge/Build-Passing-brightgreen)](https://github.com/Zarva21/E-Commerce-DesWeb/actions)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
-[![GitHub stars](https://img.shields.io/github/stars/YOUR_USERNAME/E-Commerce-DesWeb.svg?style=social)](https://github.com/YOUR_USERNAME/E-Commerce-DesWeb/stargazers)
+[![GitHub stars](https://img.shields.io/github/stars/Zarva21/E-Commerce-DesWeb.svg?style=social)](https://github.com/Zarva21/E-Commerce-DesWeb/stargazers)
 
 </div>
 
